@@ -16,11 +16,49 @@ $SPEC{setup_symlink} = {
     summary  => "Create symlink or fix symlink target",
     args     => {
         symlink => ['str*' => {
-            summary => 'Path to symlink, must be absolute',
+            summary => 'Path to symlink',
+            description => <<'_',
+
+Symlink path needs to be absolute because it is used as a key for states. The
+function cannot normalize a non-absolute symlink using something Cwd's abs_path
+because that requires the symlink to exist first.
+
+_
             match   => qr!^/!,
         }],
         target => ['str*' => {
             summary => 'Target path of symlink',
+        }],
+        create => ['bool' => {
+            summary => "Create if symlink doesn't exist",
+            default => 1,
+            description => <<'_',
+If set to false, then setup will fail (500) if this condition is encountered.
+_
+        }],
+        replace_symlink => ['bool' => {
+            summary => "Replace previous symlink if it already exists ".
+                "but doesn't point to the wanted target",
+            description => <<'_',
+If set to false, then setup will fail (500) if this condition is encountered.
+_
+            default => 1,
+        }],
+        delete_file => ['bool' => {
+            summary => "Create if previous symlink already exists ".
+                "but is not a symlink (a file)",
+            description => <<'_',
+If set to false, then setup will fail (500) if this condition is encountered.
+_
+            default => 0,
+        }],
+        delete_dir => ['bool' => {
+            summary => "Create if previous symlink already exists ".
+                "but is not a symlink (a dir)",
+            description => <<'_',
+If set to false, then setup will fail (500) if this condition is encountered.
+_
+            default => 0,
         }],
     },
     features => {undo=>1, dry_run=>1},
@@ -83,15 +121,41 @@ __END__
 =head1 SYNOPSIS
 
  use Setup::Symlink 'setup_symlink';
- setup_symlink symlink => "/symlink", target => "/target";
 
- # but run through a runner like Sub::Spec::Runner for proper undo action
+ # setup symlink: will create /foo as a symlink to /bar
+ setup_symlink symlink => "/foo", target => "/bar", -undo => ;
+
+ # setup another symlink (doesn't save undo info)
+ setup_symlink symlink => "/baz", target => "/qux";
+
+ # unsetup symlink: will delete /foo if it's a symlink to /bar
+ setup_symlink symlink => "/symlink", target=>"/target", -undo => 1;
 
 
 =head1 DESCRIPTION
 
+This module provides one function B<setup_symlink> to setup symlinks.
+
+I use the C<Setup::> namespace for modules that contain functions to set things
+up, that is, reach some desired state (e.g. some file/symlink exists with the
+right content/permission/target), do nothing if that desired state has already
+been reached, and additionally can restore state to previous one before changed
+by said functions.
+
 This module uses L<Log::Any> logging framework.
 
-This module's functions are given L<Sub::Spec> specs.
+This module's functions have L<Sub::Spec> specs.
+
+
+=head1 FUNCTIONS
+
+None are exported by default, but they are exportable.
+
+
+=head1 SEE ALSO
+
+L<Sub::Spec>
+
+L<Sub::Spec::Runner>
 
 =cut
