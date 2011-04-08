@@ -133,7 +133,7 @@ sub setup_symlink {
         return [200, "Created", undef, {undo_info=>['none']}];
     } elsif ($is_symlink) {
         return [412, "Should replace symlink but told not to, ".
-                    "please delete $symlink manually first"];
+                    "please delete $symlink manually first"]
             unless $replace_sym;
         $log->tracef("setup_symlink: replacing symlink %s", $symlink);
         return [304, "dry run"] if $dry_run;
