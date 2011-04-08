@@ -142,12 +142,12 @@ sub setup_symlink {
         return [200, "Replaced symlink", undef,
                 {undo_info=>[symlink=>$cur_target]}];
     } elsif ($is_dir) {
-        return [412, "Can't setup symlink $symlink because it is a dir, ".
-            "please delete it manually first"];
+        return [412, "Can't setup symlink $symlink because it is currently ".
+            "a dir, please delete it manually first"];
         # XXX
     } else {
-        return [412, "Can't setup symlink $symlink because it is a file, ".
-            "please delete it manually first"];
+        return [412, "Can't setup symlink $symlink because it is currently ".
+            "a file, please delete it manually first"];
         # XXX
     }
 }
