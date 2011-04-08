@@ -19,9 +19,7 @@ $SPEC{setup_symlink} = {
             summary => 'Path to symlink',
             description => <<'_',
 
-Symlink path needs to be absolute because it is used as a key for states. The
-function cannot normalize a non-absolute symlink using something Cwd's abs_path
-because that requires the symlink to exist first.
+Symlink path needs to be absolute so it's normalized.
 
 _
             match   => qr!^/!,
@@ -33,30 +31,40 @@ _
             summary => "Create if symlink doesn't exist",
             default => 1,
             description => <<'_',
-If set to false, then setup will fail (500) if this condition is encountered.
+
+If set to false, then setup will fail (412) if this condition is encountered.
+
 _
         }],
         replace_symlink => ['bool' => {
             summary => "Replace previous symlink if it already exists ".
                 "but doesn't point to the wanted target",
             description => <<'_',
-If set to false, then setup will fail (500) if this condition is encountered.
+
+If set to false, then setup will fail (412) if this condition is encountered.
+
 _
             default => 1,
         }],
-        delete_file => ['bool' => {
-            summary => "Create if previous symlink already exists ".
-                "but is not a symlink (a file)",
+        replace_file => ['bool' => {
+            summary => "Replace if there is existing non-symlink file",
             description => <<'_',
-If set to false, then setup will fail (500) if this condition is encountered.
+
+If set to false, then setup will fail (412) if this condition is encountered.
+
+NOTE: Not yet implemented, so will always fail under this condition.
+
 _
             default => 0,
         }],
-        delete_dir => ['bool' => {
-            summary => "Create if previous symlink already exists ".
-                "but is not a symlink (a dir)",
+        replace_dir => ['bool' => {
+            summary => "Replace if there is existing dir",
             description => <<'_',
-If set to false, then setup will fail (500) if this condition is encountered.
+
+If set to false, then setup will fail (412) if this condition is encountered.
+
+NOTE: Not yet implemented, so will always fail under this condition.
+
 _
             default => 0,
         }],
@@ -66,7 +74,7 @@ _
 sub setup_symlink {
     my %args        = @_;
     my $dry_run     = $args{-dry_run};
-    my $undo_action = $args{-undo_action};
+    my $undo_action = $args{-undo_action} // "";
 
     # check args
     my $symlink     = $args{symlink};
@@ -74,10 +82,10 @@ sub setup_symlink {
         or return [400, "Please specify an absolute path for symlink"];
     my $target  = $args{target};
     defined($target) or return [400, "Please specify target"];
-    my $create      = $args{create} // 1;
-    my $delete_file = $args{delete_dir} // 0;
-    my $delete_dir  = $args{delete_file} // 0;
-    my $replace     = $args{replace_symlink} // 1;
+    my $create       = $args{create} // 1;
+    my $replace_file = $args{replace_dir} // 0;
+    my $replace_dir  = $args{replace_file} // 0;
+    my $replace_sym  = $args{replace_symlink} // 1;
 
     # check current state
     my $is_symlink = (-l $symlink); # -l performs lstat()
@@ -89,13 +97,22 @@ sub setup_symlink {
     if ($undo_action eq 'undo') {
         return [412, "Can't undo: currently $symlink is not a symlink ".
                     "pointing to $target"] unless $state_ok;
-        unlink $symlink or return [500, "Can't undo: can't rm $symlink: $!"];
+        return [304, "dry run"] if $dry_run;
+        unlink $symlink
+            or return [500, "Can't undo: unlink $symlink: $!"];
         my $undo_info = $args{-undo_info};
         if ($undo_info->[0] eq 'dir') {
             # XXX mv $undo_info->[1], $symlink;
         } elsif ($undo_info->[0] eq 'file') {
             # XXX mv $undo_info->[1], $symlink;
+        } elsif ($undo_info->[0] eq 'symlink') {
+            $log->tracef("undo setup_symlink: restoring old symlink %s -> %s",
+                         $symlink, $undo_info->[1]);
+            return [304, "dry run"] if $dry_run;
+            symlink $undo_info->[1], $symlink
+                or return [500, "Can't undo: symlink $symlink -> $target: $!"];
         } elsif ($undo_info->[0] eq 'none') {
+            $log->tracef("undo setup_symlink: deleting symlink %s", $symlink);
         } else {
             return [412, "Invalid undo info"];
         }
@@ -104,8 +121,30 @@ sub setup_symlink {
 
     my $undo_hint = $args{-undo_hint};
 
-    # XXX perform action, save undo info
-
+    if ($state_ok) {
+        return [304, "Already ok"];
+    } elsif (!$exists) {
+        return [412, "Should create but told not to"] unless $create;
+        $log->tracef("setup_symlink: creating symlink %s", $symlink);
+        return [304, "dry run"] if $dry_run;
+        symlink $target, $symlink or return [500, "Can't symlink: $!"];
+        return [200, "Created", undef, {undo_info=>['none']}];
+    } elsif ($is_symlink) {
+        return [412, "Should replace symlink but told not to"]
+            unless $replace_sym;
+        $log->tracef("setup_symlink: replacing symlink %s", $symlink);
+        return [304, "dry run"] if $dry_run;
+        unlink $symlink or return [500, "Can't unlink $symlink: $!"];
+        symlink $target, $symlink or return [500, "Can't symlink: $!"];
+        return [200, "Replaced symlink", undef,
+                {undo_info=>[symlink=>$cur_target]}];
+    } elsif ($is_dir) {
+        return [412, "replace_dir is not implemented yet"];
+        # XXX
+    } else {
+        return [412, "replace_file is not implemented yet"];
+        # XXX
+    }
 }
 
 1;
@@ -130,19 +169,39 @@ __END__
                          -undo_action => "undo", -undo_info=>$undo_info;
  die unless $res->[0] == 200;
 
+
 =head1 DESCRIPTION
 
 This module provides one function B<setup_symlink> to setup symlinks.
 
-I use the C<Setup::> namespace for modules that contain functions to set things
-up, that is, to reach some desired state (for example, making sure some
-file/symlink exists with the right content/permission/target). The functions
-should do nothing if that desired state has already been reached. They should
-also be able to restore state (undo) to original state.
+This module is part of the Setup modules family.
 
 This module uses L<Log::Any> logging framework.
 
 This module's functions have L<Sub::Spec> specs.
+
+
+=head1 THE SETUP MODULES FAMILY
+
+I use the C<Setup::> namespace for the Setup modules family, typically used in
+installers (or other applications). The modules in Setup family have these
+characteristics:
+
+=over 4
+
+=item * used to reach some desired state
+
+For example, Setup::Symlink::setup_symlink makes sure a symlink exists to the
+desired target. Setup::File::setup_file makes sure a file exists with the
+correct content/ownership/permission.
+
+=item * do nothing if desired state has been reached
+
+=item * support dry-run (simulation) mode
+
+=item * support undo to restore state to previous/original one
+
+=back
 
 
 =head1 FUNCTIONS
@@ -152,8 +211,8 @@ None are exported by default, but they are exportable.
 
 =head1 SEE ALSO
 
-L<Sub::Spec>
+L<Sub::Spec>, specifically L<Sub::Spec::Clause::features> on dry-run/undo.
 
-L<Sub::Spec::Runner>
+Other modules in Setup:: namespace.
 
 =cut
