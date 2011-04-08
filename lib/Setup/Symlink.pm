@@ -22,10 +22,12 @@ $SPEC{setup_symlink} = {
 Symlink path needs to be absolute so it's normalized.
 
 _
+            arg_pos => 1,
             match   => qr!^/!,
         }],
         target => ['str*' => {
             summary => 'Target path of symlink',
+            arg_pos => 0,
         }],
         create => ['bool' => {
             summary => "Create if symlink doesn't exist",
