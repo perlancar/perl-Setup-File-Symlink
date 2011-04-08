@@ -130,7 +130,8 @@ sub setup_symlink {
         symlink $target, $symlink or return [500, "Can't symlink: $!"];
         return [200, "Created", undef, {undo_info=>['none']}];
     } elsif ($is_symlink) {
-        return [412, "Should replace symlink but told not to"]
+        return [412, "Should replace symlink but told not to, ".
+                    "please delete $symlink manually first"];
             unless $replace_sym;
         $log->tracef("setup_symlink: replacing symlink %s", $symlink);
         return [304, "dry run"] if $dry_run;
@@ -139,10 +140,12 @@ sub setup_symlink {
         return [200, "Replaced symlink", undef,
                 {undo_info=>[symlink=>$cur_target]}];
     } elsif ($is_dir) {
-        return [412, "replace_dir is not implemented yet"];
+        return [412, "Can't setup symlink $symlink because it is a dir, ".
+            "please delete it manually first"];
         # XXX
     } else {
-        return [412, "replace_file is not implemented yet"];
+        return [412, "Can't setup symlink $symlink because it is a file, ".
+            "please delete it manually first"];
         # XXX
     }
 }
