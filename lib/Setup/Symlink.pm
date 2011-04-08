@@ -64,55 +64,48 @@ _
     features => {undo=>1, dry_run=>1},
 };
 sub setup_symlink {
-    my %args    = @_;
-    my $dry_run = $args{-dry_run};
-    my $undo    = $args{-undo};
-    my $state   = $args{-state};
+    my %args        = @_;
+    my $dry_run     = $args{-dry_run};
+    my $undo_action = $args{-undo_action};
 
-    my $symlink = $args{symlink};
+    # check args
+    my $symlink     = $args{symlink};
     $symlink =~ m!^/!
         or return [400, "Please specify an absolute path for symlink"];
     my $target  = $args{target};
+    defined($target) or return [400, "Please specify target"];
+    my $create      = $args{create} // 1;
+    my $delete_file = $args{delete_dir} // 0;
+    my $delete_dir  = $args{delete_file} // 0;
+    my $replace     = $args{replace_symlink} // 1;
 
-    my ($ok, $nok_msg, $bail);
+    # check current state
     my $is_symlink = (-l $symlink); # -l performs lstat()
     my $exists     = (-e _);        # now we can use -e
-    my $curtarget  = $is_symlink ? readlink($symlink) : "";
-    if ($undo) {
-        my $st = $state->get($symlink);
-        $ok = !$st || !$exists || !$is_symlink || $curtarget ne $st->{target};
-        $nok_msg = "Symlink $symlink exists and was created by us" if !$ok;
-    } else {
-        if (!$exists) {
-            $ok = 0;
-            $nok_msg = "Symlink $symlink doesn't exist";
-        } elsif (!$is_symlink) {
-            $ok = 0;
-            $nok_msg = "$symlink is not a symlink";
-            $bail++; # bail out, we won't fix this, dangerous
-        } elsif ($curtarget ne $target) {
-            $ok = 0;
-            $nok_msg = "$symlink points to $curtarget instead of $target";
+    my $is_dir     = (-d _);
+    my $cur_target = $is_symlink ? readlink($symlink) : "";
+    my $state_ok   = $is_symlink && $cur_target eq $target;
+
+    if ($undo_action eq 'undo') {
+        return [412, "Can't undo: currently $symlink is not a symlink ".
+                    "pointing to $target"] unless $state_ok;
+        unlink $symlink or return [500, "Can't undo: can't rm $symlink: $!"];
+        my $undo_info = $args{-undo_info};
+        if ($undo_info->[0] eq 'dir') {
+            # XXX mv $undo_info->[1], $symlink;
+        } elsif ($undo_info->[0] eq 'file') {
+            # XXX mv $undo_info->[1], $symlink;
+        } elsif ($undo_info->[0] eq 'none') {
         } else {
-            $ok = 1;
+            return [412, "Invalid undo info"];
         }
+        return [200, "OK", undef, {}];
     }
 
-    return [304, "OK"] if $ok;
-    return [412, $nok_msg] if $dry_run || $bail;
+    my $undo_hint = $args{-undo_hint};
 
-    use autodie;
-    if ($undo) {
-        $log->debug("deleting symlink $symlink");
-        unlink $symlink;
-        $state->delete($symlink);
-    } else {
-        $log->debugf("creating symlink %s -> %s", $symlink, $target);
-        unlink $symlink if $exists; # to delete already-created symlink
-        symlink $target, $symlink;
-        $state->set($symlink => {target=>$target});
-    }
-    [200, "Fixed"];
+    # XXX perform action, save undo info
+
 }
 
 1;
@@ -122,25 +115,30 @@ __END__
 
  use Setup::Symlink 'setup_symlink';
 
- # setup symlink: will create /foo as a symlink to /bar
- setup_symlink symlink => "/foo", target => "/bar", -undo => ;
+ # simple usage (doesn't save undo info)
+ my $res = setup_symlink symlink => "/baz", target => "/qux";
+ die unless $res->[0] == 200;
 
- # setup another symlink (doesn't save undo info)
- setup_symlink symlink => "/baz", target => "/qux";
+ # save undo info
+ my $res = setup_symlink symlink => "/foo", target => "/bar",
+                         -undo_action => 'do';
+ die unless $res->[0] == 200;
+ my $undo_info = $res->[3]{undo_info};
 
- # unsetup symlink: will delete /foo if it's a symlink to /bar
- setup_symlink symlink => "/symlink", target=>"/target", -undo => 1;
-
+ # perform undo
+ my $res = setup_symlink symlink => "/symlink", target=>"/target",
+                         -undo_action => "undo", -undo_info=>$undo_info;
+ die unless $res->[0] == 200;
 
 =head1 DESCRIPTION
 
 This module provides one function B<setup_symlink> to setup symlinks.
 
 I use the C<Setup::> namespace for modules that contain functions to set things
-up, that is, reach some desired state (e.g. some file/symlink exists with the
-right content/permission/target), do nothing if that desired state has already
-been reached, and additionally can restore state to previous one before changed
-by said functions.
+up, that is, to reach some desired state (for example, making sure some
+file/symlink exists with the right content/permission/target). The functions
+should do nothing if that desired state has already been reached. They should
+also be able to restore state (undo) to original state.
 
 This module uses L<Log::Any> logging framework.
 
