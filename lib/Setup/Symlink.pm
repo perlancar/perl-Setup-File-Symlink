@@ -163,7 +163,7 @@ __END__
  my $res = setup_symlink symlink => "/baz", target => "/qux";
  die unless $res->[0] == 200;
 
- # save undo info
+ # perform setup and save undo info (undo info should be serializable)
  my $res = setup_symlink symlink => "/foo", target => "/bar",
                          -undo_action => 'do';
  die unless $res->[0] == 200;
