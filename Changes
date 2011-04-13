@@ -1,5 +1,15 @@
 Revision history for Setup-Symlink
 
+0.02    2011-04-13
+
+        [ETC]
+
+        - Minor documentation & sub spec patches.
+
+        - Build fixes: exclude backup files, add missing dependency
+          (File::chdir, Log::Any) [cpants]
+
+
 0.01    2011-04-08
 
         - First release.
