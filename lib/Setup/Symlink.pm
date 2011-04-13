@@ -29,7 +29,7 @@ _
             summary => 'Target path of symlink',
             arg_pos => 0,
         }],
-        create => ['bool' => {
+        create => ['bool*' => {
             summary => "Create if symlink doesn't exist",
             default => 1,
             description => <<'_',
@@ -38,7 +38,7 @@ If set to false, then setup will fail (412) if this condition is encountered.
 
 _
         }],
-        replace_symlink => ['bool' => {
+        replace_symlink => ['bool*' => {
             summary => "Replace previous symlink if it already exists ".
                 "but doesn't point to the wanted target",
             description => <<'_',
@@ -48,7 +48,7 @@ If set to false, then setup will fail (412) if this condition is encountered.
 _
             default => 1,
         }],
-        replace_file => ['bool' => {
+        replace_file => ['bool*' => {
             summary => "Replace if there is existing non-symlink file",
             description => <<'_',
 
@@ -59,7 +59,7 @@ NOTE: Not yet implemented, so will always fail under this condition.
 _
             default => 0,
         }],
-        replace_dir => ['bool' => {
+        replace_dir => ['bool*' => {
             summary => "Replace if there is existing dir",
             description => <<'_',
 
