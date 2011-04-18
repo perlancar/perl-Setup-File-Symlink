@@ -1,5 +1,14 @@
 Revision history for Setup-Symlink
 
+0.03    2011-04-18
+
+        [ETC]
+
+        - Some sub spec tweaks.
+
+        - Change terminology: undo/redo info -> undo/redo data.
+
+
 0.02    2011-04-13
 
         [ETC]
