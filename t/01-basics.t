@@ -14,7 +14,7 @@ plan skip_all => "symlink() not available"
 
 my $rootdir = tempdir(CLEANUP=>1);
 $CWD = $rootdir;
-my $undo_info;
+my $undo_data;
 
 test_setup_symlink(
     name       => "create (dry run)",
@@ -32,8 +32,8 @@ test_setup_symlink(
     status     => 200,
     post_test  => sub {
         my $res = shift;
-        $undo_info = $res->[3]{undo_info};
-        is($undo_info->[0], "none", "undo info");
+        $undo_data = $res->[3]{undo_data};
+        is($undo_data->[0], "none", "undo data");
     },
 );
 test_setup_symlink(
@@ -55,7 +55,7 @@ test_setup_symlink(
     name       => "undo create",
     symlink    => "/s",
     target     => "/t",
-    other_args => {-undo_action=>"undo", -undo_info=>$undo_info},
+    other_args => {-undo_action=>"undo", -undo_data=>$undo_data},
     status     => 200,
     exists     => 0,
 );
@@ -63,7 +63,7 @@ test_setup_symlink(
     name       => "redo create",
     symlink    => "/s",
     target     => "/t",
-    other_args => {-undo_action=>"redo", -undo_info=>$undo_info},
+    other_args => {-undo_action=>"redo", -undo_data=>$undo_data},
     status     => 200,
 );
 
@@ -87,15 +87,15 @@ test_setup_symlink(
     status     => 200,
     post_test  => sub {
         my $res = shift;
-        $undo_info = $res->[3]{undo_info};
-        is($undo_info->[0], "symlink", "undo info");
+        $undo_data = $res->[3]{undo_data};
+        is($undo_data->[0], "symlink", "undo data");
     },
 );
 test_setup_symlink(
     name       => "undo replace symlink",
     symlink    => "/s",
     target     => "/t2",
-    other_args => {-undo_action=>"undo", -undo_info=>$undo_info},
+    other_args => {-undo_action=>"undo", -undo_data=>$undo_data},
     status     => 200,
     skip_test_target => 1,
     post_test  => sub {
@@ -117,7 +117,7 @@ test_setup_symlink(
 );
 # XXX redo replace symlink?
 
-# XXX reject invalid undo info?
+# XXX reject invalid undo data?
 
 # TODO replace_dir
 

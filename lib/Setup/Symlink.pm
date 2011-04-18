@@ -102,21 +102,21 @@ sub setup_symlink {
         return [304, "dry run"] if $dry_run;
         unlink $symlink
             or return [500, "Can't undo: unlink $symlink: $!"];
-        my $undo_info = $args{-undo_info};
-        if ($undo_info->[0] eq 'dir') {
-            # XXX mv $undo_info->[1], $symlink;
-        } elsif ($undo_info->[0] eq 'file') {
-            # XXX mv $undo_info->[1], $symlink;
-        } elsif ($undo_info->[0] eq 'symlink') {
+        my $undo_data = $args{-undo_data};
+        if ($undo_data->[0] eq 'dir') {
+            # XXX mv $undo_data->[1], $symlink;
+        } elsif ($undo_data->[0] eq 'file') {
+            # XXX mv $undo_data->[1], $symlink;
+        } elsif ($undo_data->[0] eq 'symlink') {
             $log->tracef("undo setup_symlink: restoring old symlink %s -> %s",
-                         $symlink, $undo_info->[1]);
+                         $symlink, $undo_data->[1]);
             return [304, "dry run"] if $dry_run;
-            symlink $undo_info->[1], $symlink
+            symlink $undo_data->[1], $symlink
                 or return [500, "Can't undo: symlink $symlink -> $target: $!"];
-        } elsif ($undo_info->[0] eq 'none') {
+        } elsif ($undo_data->[0] eq 'none') {
             $log->tracef("undo setup_symlink: deleting symlink %s", $symlink);
         } else {
-            return [412, "Invalid undo info"];
+            return [412, "Invalid undo data"];
         }
         return [200, "OK", undef, {}];
     }
@@ -130,7 +130,7 @@ sub setup_symlink {
         $log->tracef("setup_symlink: creating symlink %s", $symlink);
         return [304, "dry run"] if $dry_run;
         symlink $target, $symlink or return [500, "Can't symlink: $!"];
-        return [200, "Created", undef, {undo_info=>['none']}];
+        return [200, "Created", undef, {undo_data=>['none']}];
     } elsif ($is_symlink) {
         return [412, "Should replace symlink but told not to, ".
                     "please delete $symlink manually first"]
@@ -140,7 +140,7 @@ sub setup_symlink {
         unlink $symlink or return [500, "Can't unlink $symlink: $!"];
         symlink $target, $symlink or return [500, "Can't symlink: $!"];
         return [200, "Replaced symlink", undef,
-                {undo_info=>[symlink=>$cur_target]}];
+                {undo_data=>[symlink=>$cur_target]}];
     } elsif ($is_dir) {
         return [412, "Can't setup symlink $symlink because it is currently ".
             "a dir, please delete it manually first"];
@@ -159,19 +159,19 @@ __END__
 
  use Setup::Symlink 'setup_symlink';
 
- # simple usage (doesn't save undo info)
+ # simple usage (doesn't save undo data)
  my $res = setup_symlink symlink => "/baz", target => "/qux";
  die unless $res->[0] == 200;
 
- # perform setup and save undo info (undo info should be serializable)
+ # perform setup and save undo data (undo data should be serializable)
  my $res = setup_symlink symlink => "/foo", target => "/bar",
                          -undo_action => 'do';
  die unless $res->[0] == 200;
- my $undo_info = $res->[3]{undo_info};
+ my $undo_data = $res->[3]{undo_data};
 
  # perform undo
  my $res = setup_symlink symlink => "/symlink", target=>"/target",
-                         -undo_action => "undo", -undo_info=>$undo_info;
+                         -undo_action => "undo", -undo_data=>$undo_data;
  die unless $res->[0] == 200;
 
 
