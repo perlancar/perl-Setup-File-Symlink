@@ -1,4 +1,4 @@
-package Setup::Symlink;
+package Setup::File::Symlink;
 # ABSTRACT: Ensure symlink existence and target
 
 use 5.010;
@@ -157,7 +157,7 @@ __END__
 
 =head1 SYNOPSIS
 
- use Setup::Symlink 'setup_symlink';
+ use Setup::File::Symlink 'setup_symlink';
 
  # simple usage (doesn't save undo data)
  my $res = setup_symlink symlink => "/baz", target => "/qux";
@@ -196,8 +196,8 @@ characteristics:
 
 =item * used to reach some desired state
 
-For example, Setup::Symlink::setup_symlink makes sure a symlink exists to the
-desired target. Setup::File::setup_file makes sure a file exists with the
+For example, Setup::File::Symlink::setup_symlink makes sure a symlink exists to
+the desired target. Setup::File::setup_file makes sure a file exists with the
 correct content/ownership/permission.
 
 =item * do nothing if desired state has been reached

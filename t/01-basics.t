@@ -7,7 +7,7 @@ use Test::More 0.96;
 
 use File::chdir;
 use File::Temp qw(tempdir);
-use Setup::Symlink qw(setup_symlink);
+use Setup::File::Symlink qw(setup_symlink);
 
 plan skip_all => "symlink() not available"
     unless eval { symlink "", ""; 1 };

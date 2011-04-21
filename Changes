@@ -1,4 +1,13 @@
-Revision history for Setup-Symlink
+Revision history for Setup-File-Symlink
+
+0.05    2011-04-21
+
+        No functional change.
+
+        [INCOMPATIBLE CHANGE]
+
+        - Rename module from Setup::Symlink to Setup::File::Symlink.
+
 
 0.04    2011-04-21
 
