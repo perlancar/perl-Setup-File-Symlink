@@ -1,5 +1,5 @@
 package Setup::Symlink;
-# ABSTRACT: Setup symlink
+# ABSTRACT: Ensure symlink existence and target
 
 use 5.010;
 use strict;
@@ -177,7 +177,7 @@ __END__
 
 =head1 DESCRIPTION
 
-This module provides one function B<setup_symlink> to setup symlinks.
+This module provides one function B<setup_symlink>.
 
 This module is part of the Setup modules family.
 
