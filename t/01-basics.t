@@ -15,13 +15,14 @@ plan skip_all => "symlink() not available"
 my $rootdir = tempdir(CLEANUP=>1);
 $CWD = $rootdir;
 my $undo_data;
+my $redo_data;
 
 test_setup_symlink(
     name       => "create (dry run)",
     symlink    => "/s",
     target     => "/t",
     other_args => {-dry_run=>1},
-    status     => 304,
+    status     => 200,
     exists     => 0,
 );
 test_setup_symlink(
@@ -33,7 +34,20 @@ test_setup_symlink(
     post_test  => sub {
         my $res = shift;
         $undo_data = $res->[3]{undo_data};
-        is($undo_data->[0], "none", "undo data");
+        ok(!$undo_data, "no undo data");
+    },
+    cleanup    => 1,
+);
+test_setup_symlink(
+    name       => "create (with undo)",
+    symlink    => "/s",
+    target     => "/t",
+    other_args => {-undo_action=>"do"},
+    status     => 200,
+    post_test  => sub {
+        my $res = shift;
+        $undo_data = $res->[3]{undo_data};
+        ok($undo_data, "there is undo data");
     },
 );
 test_setup_symlink(
@@ -51,20 +65,27 @@ test_setup_symlink(
     status     => 412,
     exists     => 0,
 );
+# XXX create (undo, dry run)
 test_setup_symlink(
-    name       => "undo create",
+    name       => "create (undo)",
     symlink    => "/s",
     target     => "/t",
     other_args => {-undo_action=>"undo", -undo_data=>$undo_data},
     status     => 200,
     exists     => 0,
+    post_test  => sub {
+        my $res = shift;
+        $redo_data = $res->[3]{redo_data};
+    }
 );
+# XXX create (redo, dry run)
 test_setup_symlink(
-    name       => "redo create",
+    name       => "create (redo)",
     symlink    => "/s",
     target     => "/t",
-    other_args => {-undo_action=>"redo", -undo_data=>$undo_data},
+    other_args => {-undo_action=>"redo", -redo_data=>$redo_data},
     status     => 200,
+    exists     => 1,
 );
 
 test_setup_symlink(
@@ -72,7 +93,7 @@ test_setup_symlink(
     symlink    => "/s",
     target     => "/t2",
     other_args => {-dry_run=>1},
-    status     => 304,
+    status     => 200,
     skip_test_target => 1,
     post_test  => sub {
         my $res = shift;
@@ -80,19 +101,18 @@ test_setup_symlink(
     },
 );
 test_setup_symlink(
-    name       => "replace symlink",
+    name       => "replace symlink (with undo)",
     symlink    => "/s",
     target     => "/t2",
-    other_args => {},
+    other_args => {-undo_action=>"do"},
     status     => 200,
     post_test  => sub {
         my $res = shift;
         $undo_data = $res->[3]{undo_data};
-        is($undo_data->[0], "symlink", "undo data");
     },
 );
 test_setup_symlink(
-    name       => "undo replace symlink",
+    name       => "replace symlink (undo)",
     symlink    => "/s",
     target     => "/t2",
     other_args => {-undo_action=>"undo", -undo_data=>$undo_data},
@@ -100,27 +120,36 @@ test_setup_symlink(
     skip_test_target => 1,
     post_test  => sub {
         my $res = shift;
+        $redo_data = $res->[3]{redo_data};
         is(readlink("$rootdir/s"), "$rootdir/t", "old symlink restored");
+    },
+);
+test_setup_symlink(
+    name       => "replace symlink (redo)",
+    symlink    => "/s",
+    target     => "/t2",
+    other_args => {-undo_action=>"redo", -redo_data=>$redo_data},
+    status     => 200,
+    skip_test_target => 1,
+    post_test  => sub {
+        my $res = shift;
+        is(readlink("$rootdir/s"), "$rootdir/t2", "new symlink restored");
     },
 );
 test_setup_symlink(
     name       => "do not replace symlink",
     symlink    => "/s",
-    target     => "/t2",
+    target     => "/t",
     other_args => {replace_symlink=>0},
     status     => 412,
     skip_test_target => 1,
     post_test  => sub {
         my $res = shift;
-        is(readlink("$rootdir/s"), "$rootdir/t", "old symlink unreplaced");
+        is(readlink("$rootdir/s"), "$rootdir/t2", "old symlink unreplaced");
     },
 );
-# XXX redo replace symlink?
-
 # XXX reject invalid undo data?
-
 # TODO replace_dir
-
 # TODO replace_file
 
 DONE_TESTING:
@@ -179,6 +208,10 @@ sub test_setup_symlink {
 
         if ($args{post_test}) {
             $args{post_test}->($res);
+        }
+
+        if ($args{cleanup}) {
+            unlink $symlink;
         }
     };
 }
