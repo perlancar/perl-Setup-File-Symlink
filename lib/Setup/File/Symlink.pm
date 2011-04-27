@@ -123,12 +123,12 @@ sub setup_symlink {
                 if (!$replace_dir) {
                     return [412, "must replace dir but instructed not to"];
                 }
-                push @$steps, ["rm"], ["ln"];
+                push @$steps, ["rm_r"], ["ln"];
             } else {
                 if (!$replace_file) {
                     return [412, "must replace file but instructed not to"];
                 }
-                push @$steps, ["rm"], ["ln"];
+                push @$steps, ["rm_r"], ["ln"];
             }
         } elsif ($is_symlink && $cur_target ne $target) {
             $log->tracef("nok: symlink doesn't point to correct target");
@@ -147,8 +147,7 @@ sub setup_symlink {
 
     return [400, "Invalid steps, must be an array"]
         unless $steps && ref($steps) eq 'ARRAY';
-
-    return [200, "Dry run"] if $dry_run;
+    return [200, "Dry run"] if $dry_run && @$steps;
 
     # create tmp dir for undo
     my $save_undo    = $undo_action ? 1:0;
@@ -156,7 +155,7 @@ sub setup_symlink {
     return [400, "Invalid -undo_hint, please supply a hashref"]
         unless ref($undo_hint) eq 'HASH';
     my $tmp_dir = $undo_hint->{tmp_dir} // "$ENV{HOME}/.setup";
-    if ($save_undo && !(-d $tmp_dir)) {
+    if ($save_undo && !(-d $tmp_dir) && !$dry_run) {
         mkdir $tmp_dir or return [500, "Can't make temp dir `$tmp_dir`: $!"];
     }
     my $save_path = "$tmp_dir/".UUID::Random::generate;
@@ -171,15 +170,15 @@ sub setup_symlink {
         my $err;
         return [400, "Invalid step (not array)"] unless ref($step) eq 'ARRAY';
         if ($step->[0] eq 'rmsym') {
-            if ($exists) {
+            if ((-l $symlink) || (-e _)) {
                 if (unlink $symlink) {
-                    unshift @$undo_steps, ["ln", $cur_target];
+                    unshift @$undo_steps, ["ln", readlink($symlink)];
                 } else {
                     $err = "Can't remove $symlink: $!";
                 }
             }
-        } elsif ($step->[0] eq 'rm') {
-            if ($exists) {
+        } elsif ($step->[0] eq 'rm_r') {
+            if ((-l $symlink) || (-e _)) {
                 # do not bother to save file/dir if not asked
                 if ($save_undo) {
                     if (rmove $symlink, $save_path) {
