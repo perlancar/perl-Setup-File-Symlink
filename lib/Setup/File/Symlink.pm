@@ -172,8 +172,9 @@ sub setup_symlink {
         return [400, "Invalid step (not array)"] unless ref($step) eq 'ARRAY';
         if ($step->[0] eq 'rmsym') {
             if ((-l $symlink) || (-e _)) {
+                my $t = readlink($symlink) // "";
                 if (unlink $symlink) {
-                    unshift @$undo_steps, ["ln", readlink($symlink)];
+                    unshift @$undo_steps, ["ln", $t];
                 } else {
                     $err = "Can't remove $symlink: $!";
                 }
@@ -198,7 +199,7 @@ sub setup_symlink {
             if ((-l $symlink) || (-e _)) {
                 $err = "Can't restore $step->[1] -> $symlink: already exists";
             } elsif (rmove $step->[1], $symlink) {
-                unshift @$undo_steps, ["rm"];
+                unshift @$undo_steps, ["rm_r"];
             } else {
                 $err = "Can't restore $step->[1] -> $symlink: $!";
             }
@@ -230,6 +231,7 @@ sub setup_symlink {
     my $meta = {};
     if ($undo_action =~ /^(re)?do$/) { $meta->{undo_data} = $undo_steps }
     elsif ($undo_action eq 'undo')   { $meta->{redo_data} = $undo_steps }
+    $log->tracef("meta: %s", $meta);
     return [@$steps ? 200 : 304,
             @$steps ? "OK" : "Nothing done",
             undef,
