@@ -6,6 +6,11 @@ use strict;
 use warnings;
 use Log::Any '$log';
 
+use Data::Dump::Partial qw(dumpp);
+use File::Copy::Recursive qw(rmove);
+use File::Path qw(remove_tree);
+use UUID::Random;
+
 require Exporter;
 our @ISA       = qw(Exporter);
 our @EXPORT_OK = qw(setup_symlink);
@@ -14,6 +19,21 @@ our %SPEC;
 
 $SPEC{setup_symlink} = {
     summary  => "Create symlink or fix symlink target",
+    description => <<'_',
+
+On do, will create symlink which points to specified target. If symlink already
+exists but points to another target, it will be replaced with the correct
+symlink if replace_symlink option is true. If a file already exists, it will be
+removed (or, backed up to temporary directory) before the symlink is created, if
+replace_file option is true.
+
+If given, -undo_hint should contain {tmp_dir=>...} to specify temporary
+directory to save replaced file/dir. Temporary directory defaults to ~/.setup,
+it will be created if not exists.
+
+On undo, will restore the original symlink/ if it was replaced during do.
+
+_
     args     => {
         symlink => ['str*' => {
             summary => 'Path to symlink',
@@ -54,8 +74,6 @@ _
 
 If set to false, then setup will fail (412) if this condition is encountered.
 
-NOTE: Not yet implemented, so will always fail under this condition.
-
 _
             default => 0,
         }],
@@ -64,8 +82,6 @@ _
             description => <<'_',
 
 If set to false, then setup will fail (412) if this condition is encountered.
-
-NOTE: Not yet implemented, so will always fail under this condition.
 
 _
             default => 0,
@@ -85,8 +101,8 @@ sub setup_symlink {
     my $target  = $args{target};
     defined($target) or return [400, "Please specify target"];
     my $create       = $args{create} // 1;
-    my $replace_file = $args{replace_dir} // 0;
-    my $replace_dir  = $args{replace_file} // 0;
+    my $replace_file = $args{replace_file} // 0;
+    my $replace_dir  = $args{replace_dir} // 0;
     my $replace_sym  = $args{replace_symlink} // 1;
 
     # check current state and collect steps
@@ -101,16 +117,12 @@ sub setup_symlink {
             if (!$replace_dir) {
                 return [412, "must replace dir but instructed not to"];
             }
-            return [501, "replacing dir is not yet implemented"];
-            # step: move dir to backup
-            # step: ln
+            push @$steps, ["rm"], ["ln"];
         } else {
             if (!$replace_file) {
                 return [412, "must replace file but instructed not to"];
             }
-            return [501, "replacing dir is not yet implemented"];
-            # step: move dir to backup
-            # step: ln
+            push @$steps, ["rm"], ["ln"];
         }
     } elsif ($is_symlink && $cur_target ne $target) {
         $log->tracef("nok: symlink doesn't point to correct target");
@@ -141,6 +153,17 @@ sub setup_symlink {
     return [304, "Nothing to do"] unless @$steps;
     return [200, "Dry run"] if $dry_run;
 
+    # create tmp dir for undo
+    my $save_undo    = $undo_action ? 1:0;
+    my $undo_hint = $args{-undo_hint} // {};
+    return [400, "Invalid -undo_hint, please supply a hashref"]
+        unless ref($undo_hint) eq 'HASH';
+    my $tmp_dir = $undo_hint->{tmp_dir} // "$ENV{HOME}/.setup";
+    if ($save_undo && !(-d $tmp_dir)) {
+        mkdir $tmp_dir or return [500, "Can't make temp dir `$tmp_dir`: $!"];
+    }
+    my $save_path = "$tmp_dir/".UUID::Random::generate;
+
     my $is_rollback;
     my $undo_steps = [];
   STEPS:
@@ -154,6 +177,26 @@ sub setup_symlink {
                 unshift @$undo_steps, ["ln", $cur_target];
             } else {
                 $err = "Can't remove $symlink: $!";
+            }
+        } elsif ($step->[0] eq 'rm') {
+            # do not bother to save file/dir if not asked
+            if ($save_undo) {
+                if (rmove $symlink, $save_path) {
+                    unshift @$undo_steps, ["restore", $save_path];
+                } else {
+                    $err = "Can't move file/dir $symlink -> $save_path: $!";
+                }
+            } else {
+                remove_tree($symlink, {error=>\my $e});
+                if (@$e) {
+                    $err = "Can't remove file/dir $symlink: ".dumpp($e);
+                }
+            }
+        } elsif ($step->[0] eq 'restore') {
+            if (rmove $step->[1], $symlink) {
+                unshift @$undo_steps, ["rm"];
+            } else {
+                $err = "Can't restore $step->[1] -> $symlink: $!";
             }
         } elsif ($step->[0] eq 'ln') {
             my $t = $step->[1] // $target;
