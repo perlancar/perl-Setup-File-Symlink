@@ -161,11 +161,12 @@ sub setup_symlink {
     my $save_path = "$tmp_dir/".UUID::Random::generate;
 
     # perform the steps
-    my $is_rollback;
+    my $rollback;
     my $undo_steps = [];
   STEPS:
     for my $i (0..@$steps-1) {
         my $step = $steps->[$i];
+        next unless defined $step; # can happen even when steps=[], due to redo
         $log->tracef("step %d of 0..%d: %s", $i, @$steps-1, $step);
         my $err;
         return [400, "Invalid step (not array)"] unless ref($step) eq 'ARRAY';
@@ -183,18 +184,20 @@ sub setup_symlink {
                 if ($save_undo) {
                     if (rmove $symlink, $save_path) {
                         unshift @$undo_steps, ["restore", $save_path];
-                    } elsif ((-l $symlink) || (-e _)) {
+                    } else {
                         $err = "Can't move file/dir $symlink -> $save_path: $!";
                     }
                 } else {
                     remove_tree($symlink, {error=>\my $e});
-                    if (@$e && ((-l $symlink) || (-e _))) {
+                    if (@$e) {
                         $err = "Can't remove file/dir $symlink: ".dumpp($e);
                     }
                 }
             }
         } elsif ($step->[0] eq 'restore') {
-            if (rmove $step->[1], $symlink) {
+            if ((-l $symlink) || (-e _)) {
+                $err = "Can't restore $step->[1] -> $symlink: already exists";
+            } elsif (rmove $step->[1], $symlink) {
                 unshift @$undo_steps, ["rm"];
             } else {
                 $err = "Can't restore $step->[1] -> $symlink: $!";
@@ -212,16 +215,17 @@ sub setup_symlink {
             die "BUG: Unknown step command: $step->[0]";
         }
         if ($err) {
-            if ($is_rollback) {
+            if ($rollback) {
                 die "Failed rollback step $i of 0..".(@$steps-1).": $err";
             } else {
                 $log->tracef("Step failed: $err, performing rollback ...");
-                $is_rollback++;
+                $rollback = $err;
                 $steps = $undo_steps;
                 redo STEPS;
             }
         }
     }
+    return [500, "Error (rollbacked): $rollback"] if $rollback;
 
     my $meta = {};
     if ($undo_action =~ /^(re)?do$/) { $meta->{undo_data} = $undo_steps }
