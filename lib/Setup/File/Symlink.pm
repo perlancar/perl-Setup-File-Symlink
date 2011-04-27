@@ -208,7 +208,7 @@ sub setup_symlink {
                 if (symlink $t, $symlink) {
                     unshift @$undo_steps, ["rmsym"];
                 } else {
-                    $err = "Can't symlink $symlink -> $target: $!";
+                    $err = "Can't symlink $symlink -> $t: $!";
                 }
             }
         } else {
