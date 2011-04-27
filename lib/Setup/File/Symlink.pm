@@ -304,6 +304,15 @@ Function should return 200 on success, but change nothing.
 
 =back
 
+The following is the general logic flow of a typical setup function (for more
+details, delve directly into source code): first, setup an empty list of steps.
+Then do a series of state check. If a state is incorrect, add a step to fix that
+situation. Proceed to the next state check. In the end, we end up with the list
+of steps. Return 304 if list if empty (meaning all desired states have been
+reached). Otherwise, perform each step consequently, while also append to list
+of undo steps for each step. If an error is encountered, perform a roll back
+(using the undo steps). If all steps have been done, return 200.
+
 
 =head1 FUNCTIONS
 
