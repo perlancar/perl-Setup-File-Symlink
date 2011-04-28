@@ -91,6 +91,7 @@ _
 };
 sub setup_symlink {
     my %args        = @_;
+    $log->tracef("=> setup_symlink(%s)", \%args); # TMP
     my $dry_run     = $args{-dry_run};
     my $undo_action = $args{-undo_action} // "";
 
@@ -113,8 +114,6 @@ sub setup_symlink {
     my $steps;
     if ($undo_action eq 'undo') {
         $steps = $args{-undo_data} or return [400, "Please supply -undo_data"];
-    } elsif ($undo_action eq 'redo') {
-        $steps = $args{-redo_data} or return [400, "Please supply -redo_data"];
     } else {
         $steps = [];
         if ($exists && !$is_symlink) {
@@ -229,13 +228,9 @@ sub setup_symlink {
     return [500, "Error (rollbacked): $rollback"] if $rollback;
 
     my $meta = {};
-    if ($undo_action =~ /^(re)?do$/) { $meta->{undo_data} = $undo_steps }
-    elsif ($undo_action eq 'undo')   { $meta->{redo_data} = $undo_steps }
+    $meta->{undo_data} = $undo_steps if $save_undo;
     $log->tracef("meta: %s", $meta);
-    return [@$steps ? 200 : 304,
-            @$steps ? "OK" : "Nothing done",
-            undef,
-            $meta];
+    return [@$steps ? 200 : 304, @$steps ? "OK" : "Nothing done", undef, $meta];
 }
 
 1;
@@ -258,12 +253,6 @@ __END__
  # perform undo
  my $res = setup_symlink symlink => "/symlink", target=>"/target",
                          -undo_action => "undo", -undo_data=>$undo_data;
- die unless $res->[0] == 200;
- my $redo_data = $res->[3]{redo_data};
-
- # perform redo
- my $res = setup_symlink symlink => "/symlink", target=>"/target",
-                         -undo_action => "redo", -redo_data=>$redo_data;
  die unless $res->[0] == 200;
 
 
