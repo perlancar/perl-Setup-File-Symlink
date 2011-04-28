@@ -280,38 +280,9 @@ This module's functions have L<Sub::Spec> specs.
 
 =head1 THE SETUP MODULES FAMILY
 
-I use the C<Setup::> namespace for the Setup modules family, typically used in
-installers (or other applications). The modules in Setup family have these
-characteristics:
-
-=over 4
-
-=item * used to reach some desired state
-
-For example, Setup::File::Symlink::setup_symlink makes sure a symlink exists to
-the desired target. Setup::File::setup_file makes sure a file exists with the
-correct content/ownership/permission.
-
-=item * do nothing if desired state has been reached
-
-Function should return 304 (nothing to do) status.
-
-=item * support dry-run (simulation) mode
-
-Function should return 200 on success, but change nothing.
-
-=item * support undo to restore state to previous/original one
-
-=back
-
-The following is the general logic flow of a typical setup function (for more
-details, delve directly into source code): first, setup an empty list of steps.
-Then do a series of state check. If a state is incorrect, add a step to fix that
-situation. Proceed to the next state check. In the end, we end up with the list
-of steps. Return 304 if list if empty (meaning all desired states have been
-reached). Otherwise, perform each step consequently, while also append to list
-of undo steps for each step. If an error is encountered, perform a roll back
-(using the undo steps). If all steps have been done, return 200.
+I use the C<Setup::> namespace for the Setup modules family. See C<Setup::File>
+for more details on the goals, characteristics, and implementation of Setup
+modules family.
 
 
 =head1 FUNCTIONS
@@ -320,8 +291,6 @@ None are exported by default, but they are exportable.
 
 
 =head1 SEE ALSO
-
-L<Sub::Spec>, specifically L<Sub::Spec::Clause::features> on dry-run/undo.
 
 Other modules in Setup:: namespace.
 
