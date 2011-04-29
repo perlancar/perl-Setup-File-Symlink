@@ -1,5 +1,5 @@
 package Setup::File::Symlink;
-# ABSTRACT: Ensure symlink existence and target
+# ABSTRACT: Setup symlink (existence, target)
 
 use 5.010;
 use strict;
@@ -18,7 +18,7 @@ our @EXPORT_OK = qw(setup_symlink);
 our %SPEC;
 
 $SPEC{setup_symlink} = {
-    summary  => "Create symlink or fix symlink target",
+    summary  => "Setup symlink (existence, target)",
     description => <<'_',
 
 On do, will create symlink which points to specified target. If symlink already
@@ -31,7 +31,8 @@ If given, -undo_hint should contain {tmp_dir=>...} to specify temporary
 directory to save replaced file/dir. Temporary directory defaults to ~/.setup,
 it will be created if not exists.
 
-On undo, will restore the original symlink/ if it was replaced during do.
+On undo, will delete symlink if it was created by this function, and restore the
+original symlink/file/dir if it was replaced during do.
 
 _
     args     => {
