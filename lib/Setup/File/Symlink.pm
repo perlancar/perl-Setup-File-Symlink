@@ -92,7 +92,6 @@ _
 };
 sub setup_symlink {
     my %args        = @_;
-    $log->tracef("=> setup_symlink(%s)", \%args); # TMP
     my $dry_run     = $args{-dry_run};
     my $undo_action = $args{-undo_action} // "";
 
