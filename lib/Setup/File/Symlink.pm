@@ -169,6 +169,7 @@ sub setup_symlink {
         my $err;
         return [400, "Invalid step (not array)"] unless ref($step) eq 'ARRAY';
         if ($step->[0] eq 'rmsym') {
+            $log->info("Removing symlink $symlink ...");
             if ((-l $symlink) || (-e _)) {
                 my $t = readlink($symlink) // "";
                 if (unlink $symlink) {
@@ -178,6 +179,7 @@ sub setup_symlink {
                 }
             }
         } elsif ($step->[0] eq 'rm_r') {
+            $log->info("Removing file/dir $symlink ...");
             if ((-l $symlink) || (-e _)) {
                 # do not bother to save file/dir if not asked
                 if ($save_undo) {
@@ -194,6 +196,7 @@ sub setup_symlink {
                 }
             }
         } elsif ($step->[0] eq 'restore') {
+            $log->info("Restoring from $step->[1] -> $symlink ...");
             if ((-l $symlink) || (-e _)) {
                 $err = "Can't restore $step->[1] -> $symlink: already exists";
             } elsif (rmove $step->[1], $symlink) {
@@ -203,6 +206,7 @@ sub setup_symlink {
             }
         } elsif ($step->[0] eq 'ln') {
             my $t = $step->[1] // $target;
+            $log->info("Symlink $symlink -> $t ...");
             unless ((-l $symlink) && readlink($symlink) eq $t) {
                 if (symlink $t, $symlink) {
                     unshift @$undo_steps, ["rmsym"];
