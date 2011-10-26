@@ -206,7 +206,7 @@ sub setup_symlink {
             }
         } elsif ($step->[0] eq 'ln') {
             my $t = $step->[1] // $target;
-            $log->info("Symlink $symlink -> $t ...");
+            $log->info("Creating symlink $symlink -> $t ...");
             unless ((-l $symlink) && readlink($symlink) eq $t) {
                 if (symlink $t, $symlink) {
                     unshift @$undo_steps, ["rmsym"];
