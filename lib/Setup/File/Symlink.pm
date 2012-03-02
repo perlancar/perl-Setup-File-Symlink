@@ -1,5 +1,4 @@
 package Setup::File::Symlink;
-# ABSTRACT: Setup symlink (existence, target)
 
 use 5.010;
 use strict;
@@ -14,6 +13,8 @@ use UUID::Random;
 require Exporter;
 our @ISA       = qw(Exporter);
 our @EXPORT_OK = qw(setup_symlink);
+
+# VERSION
 
 our %SPEC;
 
@@ -237,7 +238,7 @@ sub setup_symlink {
 }
 
 1;
-__END__
+# ABSTRACT: Setup symlink (existence, target)
 
 =head1 SYNOPSIS
 
