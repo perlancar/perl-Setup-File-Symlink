@@ -52,7 +52,7 @@ _
             summary => 'Target path of symlink',
             schema => 'str*',
             req => 1,
-            pos => 1,
+            pos => 0,
         },
         create => {
             summary => "Create if symlink doesn't exist",
