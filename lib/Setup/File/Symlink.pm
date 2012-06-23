@@ -7,7 +7,7 @@ use Log::Any '$log';
 
 use File::Copy::Recursive qw(rmove);
 use File::Path qw(remove_tree);
-use Perinci::Sub::Gen::Undoable 0.07 qw(gen_undoable_func);
+use Perinci::Sub::Gen::Undoable 0.08 qw(gen_undoable_func);
 use UUID::Random;
 
 require Exporter;
@@ -179,10 +179,7 @@ _
             description => <<'_',
 Rename back file/dir in the trash to the original path.
 _
-            check => sub {
-                my ($args, $step) = @_;
-                return ["rm_r"];
-            },
+            check => ["rm_r"],
             fix => sub {
                 my ($args, $step, $undo) = @_;
                 my $f  = $args->{symlink};
