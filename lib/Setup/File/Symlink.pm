@@ -7,7 +7,7 @@ use Log::Any '$log';
 
 use File::Copy::Recursive qw(rmove);
 use File::Path qw(remove_tree);
-use Perinci::Sub::Gen::Undoable 0.08 qw(gen_undoable_func);
+use Perinci::Sub::Gen::Undoable 0.09 qw(gen_undoable_func);
 use UUID::Random;
 
 require Exporter;
@@ -160,9 +160,9 @@ _
                 my $sp = "$args->{-undo_trash_dir}/".
                     UUID::Random::generate;
                 if ((-l $f) || (-e _)) {
-                    return ["restore", $sp];
+                    return [200, "OK", ["restore", $sp]];
                 }
-                return;
+                return [200, "OK"];
             },
             fix => sub {
                 my ($args, $step, $undo) = @_;
@@ -179,7 +179,9 @@ _
             description => <<'_',
 Rename back file/dir in the trash to the original path.
 _
-            check => ["rm_r"],
+            check => sub {
+                return [200, "OK", ["rm_r"]];
+            },
             fix => sub {
                 my ($args, $step, $undo) = @_;
                 my $f  = $args->{symlink};
@@ -200,9 +202,9 @@ _
                 my $s = $args->{symlink};
                 if ((-l $s) || (-e _)) {
                     my $t = readlink($s) // "";
-                    return ["ln", $t];
+                    return [200, "OK", ["ln", $t]];
                 }
-                return;
+                return [200, "OK"];
             },
             fix => sub {
                 my ($args, $step, $undo) = @_;
@@ -225,9 +227,9 @@ _
                 my $s = $args->{symlink};
                 my $t = $step->[1] // $args->{target};
                 unless ((-l $s) && readlink($s) eq $t) {
-                    return ["rmsym"];
+                    return [200, "OK", ["rmsym"]];
                 }
-                return;
+                return [200, "OK"];
             },
             fix => sub {
                 my ($args, $step, $undo) = @_;
