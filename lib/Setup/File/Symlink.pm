@@ -193,9 +193,16 @@ _
             },
         },
         rmsym => {
-            summary => 'Delete symlink',
+            summary => "Delete symlink at 'path'",
             description => <<'_',
-The original symlink target is saved as undo data.
+
+Syntax: `["rmsym"]`
+
+Will also delete 'path' even if it is a file (not a symlink). Will fail if
+'path' is a directory. The original symlink target is saved as undo data.
+
+See also: ln.
+
 _
             check => sub {
                 my ($args, $step) = @_;
@@ -220,7 +227,13 @@ _
         ln => {
             summary => 'Create symlink',
             description => <<'_',
-Create symlink which points to arg[1], or by default to 'target'.
+
+Syntax: `["ln", $t?]`.
+
+Create symlink which points to $t, or by default to the 'target' argument.
+
+See also: rmsym.
+
 _
             check => sub {
                 my ($args, $step) = @_;
