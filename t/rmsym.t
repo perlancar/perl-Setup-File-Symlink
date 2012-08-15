@@ -17,24 +17,29 @@ plan skip_all => "symlink() not available"
 my $rootdir = tempdir(CLEANUP=>1);
 $CWD = $rootdir;
 
-test_ln_s(
+symlink "x", "$rootdir/s";
+test_rmsym(
     name          => "fixable",
-    symlink       => "/s",
-    target        => "/t",
-    check_unsetup => {exists=>0},
-    check_setup   => {},
-    cleanup       => sub { unlink "s" },
+    path          => "/s",
+    check_unsetup => {exists=>1},
+    check_setup   => {exists=>0},
 );
 
-write_file("$rootdir/s", "");
-test_ln_s(
-    name          => "unfixable: s already exists (file)",
-    symlink       => "/s",
-    target        => "/t",
-    check_unsetup => {exists=>1, is_symlink=>0},
-    check_setup   => {},
+symlink "x", "$rootdir/s";
+test_rmsym(
+    name          => "unfixable: target does not match",
+    path          => "/s",
+    target        => "y",
+    check_unsetup => {exists=>1},
     dry_do_error  => 412,
-    cleanup       => sub { unlink "s" },
+);
+
+unlink "$rootdir/s"; write_file("$rootdir/s", "");
+test_rmsym(
+    name          => "unfixable: path not symlink",
+    path          => "/s",
+    check_unsetup => {exists=>1, is_symlink=>0},
+    dry_do_error  => 412,
 );
 
 DONE_TESTING:
@@ -46,7 +51,7 @@ if (Test::More->builder->is_passing) {
     diag "there are failing tests, not deleting test data dir $rootdir";
 }
 
-sub test_ln_s {
+sub test_rmsym {
     my (%targs) = @_;
 
     my %tsargs;
@@ -54,21 +59,21 @@ sub test_ln_s {
     for (qw/name dry_do_error do_error set_state1 set_state2 prepare cleanup/) {
         $tsargs{$_} = $targs{$_};
     }
-    $tsargs{function} = \&Setup::File::Symlink::ln_s;
+    $tsargs{function} = \&Setup::File::Symlink::rmsym;
 
-    my $symlink = $rootdir . $targs{symlink};
-    my $target  = $rootdir . $targs{target};
-    my %fargs = (symlink => $symlink, target => $target,
-                 -undo_trash_dir=>$rootdir, %{$targs{other_args} // {}},
+    my $path = $rootdir . $targs{path};
+    my $target; $target = $rootdir . $targs{target} if $targs{target};
+    my %fargs = (path => $path, target => $target,
+                 %{$targs{other_args} // {}},
              );
     $tsargs{args} = \%fargs;
 
     my $check = sub {
         my %cargs = @_;
 
-        my $is_symlink = (-l $symlink);
+        my $is_symlink = (-l $path);
         my $exists     = (-e _);
-        my $cur_target = $is_symlink ? readlink($symlink) : "";
+        my $cur_target = $is_symlink ? readlink($path) : "";
 
         my $te = $cargs{exists} // 1;
         if ($te) {
@@ -77,8 +82,6 @@ sub test_ln_s {
                 ok($is_symlink, "is symlink");
                 if (defined $cargs{target}) {
                     is($cur_target, $cargs{target}, "target is $cargs{target}");
-                } elsif ($cargs{test_target} // 1) {
-                    is($cur_target, $target, "target is $target");
                 }
             } else {
                 ok(!$is_symlink, "not symlink");
