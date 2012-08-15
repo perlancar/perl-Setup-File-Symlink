@@ -18,162 +18,54 @@ our @EXPORT_OK = qw(setup_symlink);
 
 our %SPEC;
 
-my $res = gen_undoable_func(
-    name        => __PACKAGE__ . '::setup_symlink',
-    summary     => "Setup symlink (existence, target)",
+my $res;
+
+# move mv to Setup::File
+
+$res = gen_undoable_func(
+    v           => 2,
+    name        => 'rm_r',
+    summary     => 'Delete file/dir',
+    trash_dir   => 1,
     description => <<'_',
 
-On do, will create symlink which points to specified target. If symlink already
-exists but points to another target, it will be replaced with the correct
-symlink if replace_symlink option is true. If a file already exists, it will be
-removed (or, backed up to temporary directory) before the symlink is created, if
-replace_file option is true.
-
-On undo, will delete symlink if it was created by this function, and restore the
-original symlink/file/dir if it was replaced during do.
-
-_
-    tx          => {use=>1},
-    trash_dir   => 1,
-    args        => {
-        symlink => {
-            summary => 'Path to symlink',
-            schema => ['str*' => {match => qr!^/!}],
-            req => 1,
-            pos => 1,
-            description => <<'_',
-
-Symlink path needs to be absolute so it's normalized.
-
-_
-        },
-        target => {
-            summary => 'Target path of symlink',
-            schema => 'str*',
-            req => 1,
-            pos => 0,
-        },
-        create => {
-            summary => "Create if symlink doesn't exist",
-            schema => [bool => {default=>1}],
-            description => <<'_',
-
-If set to false, then setup will fail (412) if this condition is encountered.
-
-_
-        },
-        replace_symlink => {
-            summary => "Replace previous symlink if it already exists ".
-                "but doesn't point to the wanted target",
-            schema => ['bool' => {default => 1}],
-            description => <<'_',
-
-If set to false, then setup will fail (412) if this condition is encountered.
-
-_
-        },
-        replace_file => {
-            summary => "Replace if there is existing non-symlink file",
-            schema => ['bool' => {default => 0}],
-            description => <<'_',
-
-If set to false, then setup will fail (412) if this condition is encountered.
-
-_
-        },
-        replace_dir => {
-            summary => "Replace if there is existing dir",
-            schema => ['bool' => {default => 0}],
-            description => <<'_',
-
-If set to false, then setup will fail (412) if this condition is encountered.
-
-_
-        },
-    },
-
-    check_args => sub {
-        my $args = shift;
-        $args->{symlink}         or return [400, "Please specify symlink"];
-        defined($args->{target}) or return [400, "Please specify target"];
-        $args->{symlink} =~ m!^/!
-            or return [400, "Please specify an absolute path for symlink"];
-        $args->{create}          //= 1;
-        $args->{replace_file}    //= 0;
-        $args->{replace_dir}     //= 0;
-        $args->{replace_symlink} //= 1;
-        [200, "OK"];
-    },
-
-    build_steps => sub {
-        my $args = shift;
-
-        my $symlink    = $args->{symlink};
-        my $target     = $args->{target};
-
-        my $is_symlink = (-l $symlink); # -l performs lstat()
-        my $exists     = (-e _);        # now we can use -e
-        my $is_dir     = (-d _);
-        my $cur_target = $is_symlink ? readlink($symlink) : "";
-
-        my @steps;
-        if ($exists && !$is_symlink) {
-            $log->infof("nok: $symlink exists but not a symlink");
-            if ($is_dir) {
-                if (!$args->{replace_dir}) {
-                    return [412, "must replace dir but instructed not to"];
-                }
-                push @steps, ["rm_r"], ["ln"];
-            } else {
-                if (!$args->{replace_file}) {
-                    return [412, "must replace file but instructed not to"];
-                }
-                push @steps, ["rm_r"], ["ln"];
-            }
-        } elsif ($is_symlink && $cur_target ne $target) {
-            $log->infof("nok: $symlink doesn't point to correct target");
-            if (!$args->{replace_symlink}) {
-                return [412, "must replace symlink but instructed not to"];
-            }
-            push @steps, ["rmsym"], ["ln"];
-        } elsif (!$exists) {
-            $log->infof("nok: $symlink doesn't exist");
-            if (!$args->{create}) {
-                return [412, "must create symlink but instructed not to"];
-            }
-            push @steps, ["ln"];
-        }
-
-        [200, "OK", \@steps];
-    },
-
-    steps => {
-        rm_r => {
-            summary => 'Delete file/dir that is to be replaced by symlink',
-            description => <<'_',
 It actually moves the file/dir to a unique name in trash and save the unique
-_name as undo data.
+name as undo data.
+
 _
-            check => sub {
-                my ($args, $step) = @_;
-                my $f  = $args->{symlink};
-                my $sp = "$args->{-undo_trash_dir}/".
-                    UUID::Random::generate;
-                if ((-l $f) || (-e _)) {
-                    return [200, "OK", ["restore", $sp]];
-                }
-                return [200, "OK"];
-            },
-            fix => sub {
-                my ($args, $step, $undo) = @_;
-                my $f  = $args->{symlink};
-                if (rmove $f, $undo->[1]) {
-                    return [200, "OK"];
-                } else {
-                    return [500, "Can't move $f -> $undo->[1]: $!"];
-                }
-            },
+    args        => {
+        path => {
+            schema => 'str*',
         },
+    },
+    check_or_fix_state => sub {
+        my ($which, $args, $undo) = @_;
+
+        my $path = $args->{path};
+        my $exists = (-l $path) || (-e _);
+        my $save = "$args->{-undo_trash_dir}/". UUID::Random::generate;
+        my @u;
+        if ($which eq 'check') {
+            if ($exists) {
+                push @u, [__PACKAGE__.'mv', {
+                    from => $save,
+                    to   => $path,
+                }];
+            }
+            return @u ? [200, "OK", \@u] : [304, "Already removed"];
+        }
+        if (rmove $path, $save) {
+            return [200, "OK"];
+        } else {
+            return [500, "Can't move $path -> $save: $!"];
+        }
+    },
+);
+die "Can't generate rm_r: $res->[0] - $res->[1]" unless $res->[0] == 200;
+
+1;
+__END__
+
         restore => {
             summary => 'Restore file/dir previously deleted by rm_r',
             description => <<'_',
@@ -258,8 +150,137 @@ _
     },
 );
 
-die "Can't generate function: $res->[0] - $res->[1]" unless $res->[0] == 200;
-$SPEC{setup_symlink} = $res->[2]{meta};
+);
+
+$res = gen_undoable_func(
+    v => 2,
+    name        => 'setup_symlink',
+    summary     => "Setup symlink (existence, target)",
+    description => <<'_',
+
+On do, will create symlink which points to specified target. If symlink already
+exists but points to another target, it will be replaced with the correct
+symlink if replace_symlink option is true. If a file already exists, it will be
+removed (or, backed up to temporary directory) before the symlink is created, if
+replace_file option is true.
+
+On undo, will delete symlink if it was created by this function, and restore the
+original symlink/file/dir if it was replaced during do.
+
+_
+    trash_dir   => 1,
+    args        => {
+        symlink => {
+            summary => 'Path to symlink',
+            schema => ['str*' => {match => qr!^/!}],
+            req => 1,
+            pos => 1,
+            description => <<'_',
+
+Symlink path needs to be absolute so it's normalized.
+
+_
+        },
+        target => {
+            summary => 'Target path of symlink',
+            schema => 'str*',
+            req => 1,
+            pos => 0,
+        },
+        create => {
+            summary => "Create if symlink doesn't exist",
+            schema => [bool => {default=>1}],
+            description => <<'_',
+
+If set to false, then setup will fail (412) if this condition is encountered.
+
+_
+        },
+        replace_symlink => {
+            summary => "Replace previous symlink if it already exists ".
+                "but doesn't point to the wanted target",
+            schema => ['bool' => {default => 1}],
+            description => <<'_',
+
+If set to false, then setup will fail (412) if this condition is encountered.
+
+_
+        },
+        replace_file => {
+            summary => "Replace if there is existing non-symlink file",
+            schema => ['bool' => {default => 0}],
+            description => <<'_',
+
+If set to false, then setup will fail (412) if this condition is encountered.
+
+_
+        },
+        replace_dir => {
+            summary => "Replace if there is existing dir",
+            schema => ['bool' => {default => 0}],
+            description => <<'_',
+
+If set to false, then setup will fail (412) if this condition is encountered.
+
+_
+        },
+    },
+
+    check_args => sub {
+        my $args = shift;
+        $args->{symlink}         or return [400, "Please specify symlink"];
+        defined($args->{target}) or return [400, "Please specify target"];
+        $args->{symlink} =~ m!^/!
+            or return [400, "Please specify an absolute path for symlink"];
+        $args->{create}          //= 1;
+        $args->{replace_file}    //= 0;
+        $args->{replace_dir}     //= 0;
+        $args->{replace_symlink} //= 1;
+        [200, "OK"];
+    },
+
+    check_state => sub {
+        my $args = shift;
+
+        my $symlink    = $args->{symlink};
+        my $target     = $args->{target};
+
+        my $is_symlink = (-l $symlink); # -l performs lstat()
+        my $exists     = (-e _);        # now we can use -e
+        my $is_dir     = (-d _);
+        my $cur_target = $is_symlink ? readlink($symlink) : "";
+
+        my @steps;
+        if ($exists && !$is_symlink) {
+            $log->infof("nok: $symlink exists but not a symlink");
+            if ($is_dir) {
+                if (!$args->{replace_dir}) {
+                    return [412, "must replace dir but instructed not to"];
+                }
+                push @steps, ["rm_r"], ["ln"];
+            } else {
+                if (!$args->{replace_file}) {
+                    return [412, "must replace file but instructed not to"];
+                }
+                push @steps, ["rm_r"], ["ln"];
+            }
+        } elsif ($is_symlink && $cur_target ne $target) {
+            $log->infof("nok: $symlink doesn't point to correct target");
+            if (!$args->{replace_symlink}) {
+                return [412, "must replace symlink but instructed not to"];
+            }
+            push @steps, ["rmsym"], ["ln"];
+        } elsif (!$exists) {
+            $log->infof("nok: $symlink doesn't exist");
+            if (!$args->{create}) {
+                return [412, "must create symlink but instructed not to"];
+            }
+            push @steps, ["ln"];
+        }
+
+        [200, "OK", \@steps];
+    },
+
 
 1;
 # ABSTRACT: Setup symlink (existence, target)
