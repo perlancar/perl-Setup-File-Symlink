@@ -1,15 +1,11 @@
-package Setup::File::Symlink;
+spackage Setup::File::Symlink;
 
 use 5.010;
 use strict;
 use warnings;
 use Log::Any '$log';
 
-use File::Copy::Recursive qw(rmove);
-use File::Path qw(remove_tree);
-use Perinci::Sub::Gen::Undoable 0.23 qw(gen_undoable_func);
-use Setup::File;
-use UUID::Random;
+use File::Trash::Undoable;
 
 require Exporter;
 our @ISA       = qw(Exporter);
@@ -19,11 +15,8 @@ our @EXPORT_OK = qw(setup_symlink);
 
 our %SPEC;
 
-my $res;
-
-$res = gen_undoable_func(
-    v           => 2,
-    name        => 'rmsym',
+$SPEC{rmsym} = {
+    v           => 1.1,
     summary     => 'Delete symlink',
     description => <<'_',
 
@@ -44,47 +37,54 @@ _
             schema => 'str*',
         },
     },
-    check_args => sub {
-        # TMP, schema
-        my $args = shift;
-        defined($args->{path}) or return [400, "Please specify path"];
-        [200, "OK"];
+    features => {
+        tx => {v=>2},
+        idempotent => 1,
     },
-    check_or_fix_state => sub {
-        my ($which, $args, $undo) = @_;
+};
+sub rmsym {
+    my %args = @_;
 
-        my $do_log   = !$args->{-check_state};
-        my $path     = $args->{path};
-        my $target   = $args->{target};
-        my $is_sym   = (-l $path);
-        my $exists   = $is_sym || (-e _);
-        my $curtarget; $curtarget = readlink($path) if $is_sym;
-        my @u;
-        if ($which eq 'check') {
-            return [412, "Not a symlink"] if $exists && !$is_sym;
-            return [412, "Target does not match ($curtarget)"] if $is_sym &&
-                defined($target) && $curtarget ne $target;
-            if ($exists) {
-                $log->info("nok: Symlink $path should be removed") if $do_log;
-                push @u, [__PACKAGE__.'::ln_s', {
-                    symlink => $path,
-                    target  => $target // $curtarget,
-                }];
-            }
-            return @u ? [200,"OK",undef,{undo_data=>\@u}]:[304,"Nothing to do"];
+    # TMP, schema
+    my $tx_action = $args{-tx_action} // '';
+    my $path = $args{path};
+    defined($path) or return [400, "Please specify path"];
+    my $target = $args{target};
+
+    my $is_sym   = (-l $path);
+    my $exists   = $is_sym || (-e _);
+    my $curtarget; $curtarget = readlink($path) if $is_sym;
+
+    my @undo;
+
+    if ($tx_action eq 'check_state') {
+        return [412, "Not a symlink"] if $exists && !$is_sym;
+        return [412, "Target does not match ($curtarget)"] if $is_sym &&
+            defined($target) && $curtarget ne $target;
+        if ($exists) {
+            $log->info("nok: Symlink $path should be removed");
+            push @undo, ['ln_s', {
+                symlink => $path,
+                target  => $target // $curtarget,
+            }];
         }
+        if (@undo) {
+            return [200, "Fixable", undef, {undo_actions=>\@undo}];
+        } else {
+            return [304, "Fixed"];
+        }
+    } elsif ($tx_action eq 'fix_state') {
         if (unlink $path) {
-            return [200, "OK"];
+            return [200, "Fixed"];
         } else {
             return [500, "Can't remove symlink: $!"];
         }
-    },
-);
-die "Can't generate rmsym: $res->[0] - $res->[1]" unless $res->[0] == 200;
+    }
+    [400, "Invalid -tx_action"];
+}
 
-$res = gen_undoable_func(
-    v           => 2,
-    name        => 'ln_s',
+$SPEC{ln_s} = {
+    v           => 1.1,
     summary     => 'Create symlink',
     description => <<'_',
 
@@ -103,45 +103,51 @@ _
             schema => 'str*',
         },
     },
-    check_args => sub {
-        # TMP, schema
-        my $args = shift;
-        defined($args->{symlink}) or return [400, "Please specify symlink"];
-        [200, "OK"];
+    features => {
+        tx => {v=>2},
+        idempotent => 1,
     },
-    check_or_fix_state => sub {
-        my ($which, $args, $undo) = @_;
+};
+sub ln_s {
+    my %args = @_;
 
-        my $do_log   = !$args->{-check_state};
-        my $symlink  = $args->{symlink};
-        my $target   = $args->{target};
-        my $is_sym   = (-l $symlink);
-        my $exists   = $is_sym || (-e _);
-        my $curtarget; $curtarget = readlink($symlink) if $is_sym;
-        my @u;
-        if ($which eq 'check') {
-            return [412, "Path already exists"] if $exists && !$is_sym;
-            return [412, "Symlink points to another target"] if $is_sym &&
-                $curtarget ne $target;
-            if (!$exists) {
-                $log->info("nok: Symlink $symlink -> $target should be created")
-                    if $do_log;
-                push @u, [__PACKAGE__.'::rmsym', {path => $symlink}];
-            }
-            return @u ? [200,"OK",undef,{undo_data=>\@u}]:[304,"Nothing to do"];
+    # TMP, schema
+    my $tx_action = $args{-tx_action} // '';
+    my $symlink = $args{symlink};
+    defined($symlink) or return [400, "Please specify symlink"];
+    my $target = $args{target};
+    defined($target) or return [400, "Please specify target"];
+
+    my $is_sym   = (-l $symlink);
+    my $exists   = $is_sym || (-e _);
+    my $curtarget; $curtarget = readlink($symlink) if $is_sym;
+    my @undo;
+
+    if ($tx_action eq 'check_state') {
+        return [412, "Path already exists"] if $exists && !$is_sym;
+        return [412, "Symlink points to another target"] if $is_sym &&
+            $curtarget ne $target;
+        if (!$exists) {
+            $log->info("nok: Symlink $symlink -> $target should be created");
+            push @undo, ['rmsym', {path => $symlink}];
         }
+        if (@undo) {
+            return [200, "Fixable", undef, {undo_actions=>\@undo}];
+        } else {
+            return [304, "Fixed"];
+        }
+    } elsif ($tx_action eq 'fix_state') {
         if (symlink $target, $symlink) {
-            return [200, "OK"];
+            return [200, "Fixed"];
         } else {
             return [500, "Can't symlink: $!"];
         }
-    },
-);
-die "Can't generate ln_s: $res->[0] - $res->[1]" unless $res->[0] == 200;
+    }
+    [400, "Invalid -tx_action"];
+}
 
-$res = gen_undoable_func(
-    v => 2,
-    name        => 'setup_symlink',
+$SPEC{setup_symlink} = {
+    v           => 1.1,
     summary     => "Setup symlink (existence, target)",
     description => <<'_',
 
@@ -155,8 +161,6 @@ On undo, will delete symlink if it was created by this function, and restore the
 original symlink/file/dir if it was replaced during do.
 
 _
-    trash_dir   => 1,
-    req_tx      => 1,
     args        => {
         symlink => {
             summary => 'Path to symlink',
@@ -213,55 +217,47 @@ If set to false, then setup will fail (412) if this condition is encountered.
 _
         },
     },
-
-    check_args => sub {
-        my $args = shift;
-        $args->{symlink}         or return [400, "Please specify symlink"];
-        defined($args->{target}) or return [400, "Please specify target"];
-        $args->{symlink} =~ m!^/!
-            or return [400, "Please specify an absolute path for symlink"];
-        $args->{create}          //= 1;
-        $args->{replace_file}    //= 0;
-        $args->{replace_dir}     //= 0;
-        $args->{replace_symlink} //= 1;
-        [200, "OK"];
+    features    => {
+        tx => {v=>2},
+        idempotent => 1,
     },
+    deps        => {
+        trash_dir   => 1,
+    },
+};
+sub setup_symlink {
+    my %args = @_;
 
-    check_or_fix_state => sub {
-        my ($which, $args, $undo) = @_;
-        my $is_check = $which eq 'check';
+    # TMP, schema
+    my $tx_action    = $args{-tx_action} // '';
+    my $symlink      = $args{symlink} or return [400, "Please specify symlink"];
+    $symlink =~ m!^/!
+        or return [400, "Please specify an absolute path for symlink"];
+    my $target       = $args{target};
+    defined($target) or return [400, "Please specify target"];
+    my $create       = $args{create}       // 1;
+    my $replace_file = $args{replace_file} // 0;
+    my $replace_dir  = $args{replace_dir}  // 0;
+    my $replace_symlink = $args{replace_symlink} // 1;
 
-        my $do_log     = !$args->{-check_state};
-        my $dry_run    = $args->{-dry_run};
-        my $tm         = $args->{-tx_manager};
-        my $log_call   = $args->{-log_call} // 1;
-        my $symlink    = $args->{symlink};
-        my $target     = $args->{target};
+    my $is_symlink = (-l $symlink); # -l performs lstat()
+    my $exists     = (-e _);    # now we can use -e
+    my $is_dir     = (-d _);
+    my $cur_target = $is_symlink ? readlink($symlink) : "";
 
-        my $is_symlink = (-l $symlink); # -l performs lstat()
-        my $exists     = (-e _);    # now we can use -e
-        my $is_dir     = (-d _);
-        my $cur_target = $is_symlink ? readlink($symlink) : "";
+    my (@do, @undo);
 
-        my $save       = "$args->{-undo_trash_dir}/". UUID::Random::generate;
-
-        my (@u, @d);
-
-        if ($exists && !$is_symlink) {
-            $log->info("nok: ".($is_dir ? "Dir" : "File")." $symlink ".
-                           "should be replaced by symlink") if $do_log;
-            if ($is_dir && !$args->{replace_dir}) {
-                return [412, "must replace dir but instructed not to"];
-            } elsif (!$args->{replace_file}) {
-                return [412, "must replace file but instructed not to"];
-            }
-            if ($is_check) {
-                push @u, (
-                    [__PACKAGE__."::rmsym",
-                     {path=>$symlink, target=>$target}],
-                    ["Setup::File::mv",
-                     {from=>$save, to=>$symlink}],
-                );
+    if ($exists && !$is_symlink) {
+        $log->info("nok: ".($is_dir ? "Dir" : "File")." $symlink ".
+                       "should be replaced by symlink");
+        if ($is_dir && !$replace_dir) {
+            return [412, "must replace dir but instructed not to"];
+        } elsif (!$args{replace_file}) {
+            return [412, "must replace file but instructed not to"];
+        }
+        push @undo, (
+            ["rmsym", {path=>$symlink, target=>$target}],
+            ["File::Trash::Undoable::trash", {path=>$symlink}],
             } else {
                 push @d, (
                     ["Setup::File::rm_r",
