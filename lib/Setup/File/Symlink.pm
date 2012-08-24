@@ -249,12 +249,12 @@ sub setup_symlink {
                        "should be replaced by symlink");
         if ($is_dir && !$replace_dir) {
             return [412, "must replace dir but instructed not to"];
-        } elsif (!$args{replace_file}) {
+        } elsif (!$is_dir && !$replace_file) {
             return [412, "must replace file but instructed not to"];
         }
         push @do, (
             ["File::Trash::Undoable::trash", {path=>$symlink}],
-            ["ln_s", {path=>$symlink, target=>$target}],
+            ["ln_s", {symlink=>$symlink, target=>$target}],
         );
         push @undo, (
             ["rmsym", {path=>$symlink, target=>$target}],
