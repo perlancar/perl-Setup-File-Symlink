@@ -1,4 +1,4 @@
-spackage Setup::File::Symlink;
+package Setup::File::Symlink;
 
 use 5.010;
 use strict;
@@ -153,9 +153,9 @@ $SPEC{setup_symlink} = {
 
 On do, will create symlink which points to specified target. If symlink already
 exists but points to another target, it will be replaced with the correct
-symlink if `replace_symlink` option is true. If a file already exists, it will
-be removed (or, backed up to temporary directory) before the symlink is created,
-if `replace_file` option is true.
+symlink if `replace_symlink` option is true. If a file/dir already exists and
+`replace_file`/`replace_dir` option is true, it will be moved (trashed) first
+before the symlink is created.
 
 On undo, will delete symlink if it was created by this function, and restore the
 original symlink/file/dir if it was replaced during do.
@@ -221,9 +221,6 @@ _
         tx => {v=>2},
         idempotent => 1,
     },
-    deps        => {
-        trash_dir   => 1,
-    },
 };
 sub setup_symlink {
     my %args = @_;
@@ -255,67 +252,47 @@ sub setup_symlink {
         } elsif (!$args{replace_file}) {
             return [412, "must replace file but instructed not to"];
         }
+        push @do, (
+            ["File::Trash::Undoable::trash", {path=>$symlink}],
+            ["ln_s", {path=>$symlink, target=>$target}],
+        );
         push @undo, (
             ["rmsym", {path=>$symlink, target=>$target}],
-            ["File::Trash::Undoable::trash", {path=>$symlink}],
-            } else {
-                push @d, (
-                    ["Setup::File::rm_r",
-                     {path=>$symlink, save_path=>$undo->[1][1]{from}}],
-                    [__PACKAGE__."::ln_s",
-                     {symlink=>$symlink, target=>$target}],
-                );
-            }
-        } elsif ($is_symlink && $cur_target ne $target) {
-            $log->infof("nok: Symlink $symlink doesn't point to correct target".
-                            " $target") if $do_log;
-            if (!$args->{replace_symlink}) {
-                return [412, "must replace symlink but instructed not to"];
-            }
-            if ($is_check) {
-                push @u, (
-                    [__PACKAGE__."::rmsym",
-                     {path=>$symlink, target=>$target}],
-                    [__PACKAGE__."::ln_s",
-                     {symlink=>$symlink, target=>$cur_target}],
-                );
-            } else {
-                push @d, (
-                    ["Setup::File::rm_r",
-                     {path=>$symlink, save_path=>$undo->[1][1]{from}}],
-                    [__PACKAGE__."::ln_s",
-                     {symlink=>$symlink, target=>$target}],
-                );
-            }
-        } elsif (!$exists) {
-            $log->infof("nok: $symlink doesn't exist");
-            if (!$args->{create}) {
-                return [412, "must create symlink but instructed not to"];
-            }
-            if ($is_check) {
-                push @u, (
-                    [__PACKAGE__."::rmsym",
-                     {path=>$symlink}],
-                );
-            } else {
-                push @d, (
-                    [__PACKAGE__."::ln_s",
-                     {symlink=>$symlink, target=>$target}],
-                );
-            }
+            ["File::Trash::Undoable::untrash", {path=>$symlink}],
+        );
+    } elsif ($is_symlink && $cur_target ne $target) {
+        $log->infof("nok: Symlink $symlink doesn't point to correct target".
+                        " $target");
+        if (!$replace_symlink) {
+            return [412, "must replace symlink but instructed not to"];
         }
+        push @do, (
+            [rmsym => {path=>$symlink}],
+            [ln_s  => {symlink=>$symlink, target=>$target}],
+        );
+        push @undo, (
+            ["rmsym", {path=>$symlink, target=>$target}],
+            ["ln_s", {symlink=>$symlink, target=>$cur_target}],
+        );
+    } elsif (!$exists) {
+        $log->infof("nok: $symlink doesn't exist");
+        if (!$create) {
+            return [412, "must create symlink but instructed not to"];
+        }
+        push @do, (
+            ["ln_s", {symlink=>$symlink, target=>$target}],
+        );
+        push @undo, (
+            ["rmsym", {path=>$symlink}],
+        );
+    }
 
-        if ($is_check) {
-            return [200, "OK", undef, {undo_data=>\@u}];
-        } else {
-            # since we'll be calling other transactional functions,
-            # which will record undo data also.
-            $tm->_empty_undo_data;
-            return $tm->call(calls => \@d, dry_run=>$dry_run);
-        }
-    },
-);
-die "Can't generate ln_s: $res->[0] - $res->[1]" unless $res->[0] == 200;
+    if (@do) {
+        return [200,"Fixable",undef, {do_actions=>\@do, undo_actions=>\@undo}];
+    } else {
+        return [304, "Fixed"];
+    }
+}
 
 1;
 # ABSTRACT: Setup symlink (existence, target)
