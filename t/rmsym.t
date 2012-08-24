@@ -17,27 +17,36 @@ plan skip_all => "symlink() not available"
 my $tmpdir = tempdir(CLEANUP=>1);
 $CWD = $tmpdir;
 
-symlink "x", "$tmpdir/s";
 test_tx_action(
     name   => "fixable",
     tmpdir => $tmpdir,
+    reset_state => sub {
+        unlink "$tmpdir/s";
+        symlink "x", "$tmpdir/s";
+    },
     f      => 'Setup::File::Symlink::rmsym',
     args   => {path=>"$tmpdir/s"},
 );
 
-symlink "x", "$tmpdir/s";
 test_tx_action(
     name   => "unfixable: target does not match",
     tmpdir => $tmpdir,
+    reset_state => sub {
+        unlink "$tmpdir/s";
+        symlink "x", "$tmpdir/s";
+    },
     f      => 'Setup::File::Symlink::rmsym',
     args   => {path=>"$tmpdir/s", target=>"y"},
     status => 412,
 );
 
-unlink "$tmpdir/s"; write_file("$tmpdir/s", "");
 test_tx_action(
     name   => "unfixable: path not symlink",
     tmpdir => $tmpdir,
+    reset_state => sub {
+        unlink "$tmpdir/s";
+        write_file("$tmpdir/s", "$tmpdir/s");
+    },
     f      => 'Setup::File::Symlink::rmsym',
     args   => {path=>"$tmpdir/s"},
     status => 412,
