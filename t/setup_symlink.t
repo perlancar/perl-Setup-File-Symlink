@@ -18,10 +18,22 @@ my $tmpdir = tempdir(CLEANUP=>1);
 $CWD = $tmpdir;
 
 test_tx_action(
+    name          => "fixed",
+    tmpdir        => $tmpdir,
+    reset_state   => sub {
+        unlink "$tmpdir/s";
+        symlink "/t", "$tmpdir/s";
+    },
+    f             => "Setup::File::Symlink::setup_symlink",
+    args          => {symlink=>"$tmpdir/s", target=>"/t"},
+    status        => 304,
+);
+
+test_tx_action(
     name          => "create",
     tmpdir        => $tmpdir,
     reset_state   => sub {
-        unlink "$tmpdir/s",
+        unlink "$tmpdir/s";
     },
     f             => "Setup::File::Symlink::setup_symlink",
     args          => {symlink=>"$tmpdir/s", target=>"/t"},
@@ -30,7 +42,7 @@ test_tx_action(
     name          => "do not create",
     tmpdir        => $tmpdir,
     reset_state   => sub {
-        unlink "$tmpdir/s",
+        unlink "$tmpdir/s";
     },
     f             => "Setup::File::Symlink::setup_symlink",
     args          => {symlink=>"$tmpdir/s", target=>"/t", create=>0},
