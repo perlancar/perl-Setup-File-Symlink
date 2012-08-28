@@ -167,11 +167,6 @@ _
             schema => ['str*' => {match => qr!^/!}],
             req => 1,
             pos => 1,
-            description => <<'_',
-
-Symlink path needs to be absolute so it's normalized.
-
-_
         },
         target => {
             summary => 'Target path of symlink',
@@ -228,8 +223,6 @@ sub setup_symlink {
     # TMP, schema
     my $tx_action    = $args{-tx_action} // '';
     my $symlink      = $args{symlink} or return [400, "Please specify symlink"];
-    $symlink =~ m!^/!
-        or return [400, "Please specify an absolute path for symlink"];
     my $target       = $args{target};
     defined($target) or return [400, "Please specify target"];
     my $create       = $args{create}       // 1;
