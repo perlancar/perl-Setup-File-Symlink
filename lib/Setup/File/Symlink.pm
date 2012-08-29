@@ -63,7 +63,7 @@ sub rmsym {
             defined($target) && $curtarget ne $target;
         if ($exists) {
             $log->info("nok: Symlink $path should be removed");
-            push @undo, ['ln_s', {
+            unshift @undo, ['ln_s', {
                 symlink => $path,
                 target  => $target // $curtarget,
             }];
@@ -129,7 +129,7 @@ sub ln_s {
             $curtarget ne $target;
         if (!$exists) {
             $log->info("nok: Symlink $symlink -> $target should be created");
-            push @undo, ['rmsym', {path => $symlink}];
+            unshift @undo, ['rmsym', {path => $symlink}];
         }
         if (@undo) {
             return [200, "Fixable", undef, {undo_actions=>\@undo}];
@@ -249,7 +249,7 @@ sub setup_symlink {
             ["File::Trash::Undoable::trash", {path=>$symlink}],
             ["ln_s", {symlink=>$symlink, target=>$target}],
         );
-        push @undo, (
+        unshift @undo, (
             ["rmsym", {path=>$symlink, target=>$target}],
             ["File::Trash::Undoable::untrash", {path=>$symlink}],
         );
@@ -263,7 +263,7 @@ sub setup_symlink {
             [rmsym => {path=>$symlink}],
             [ln_s  => {symlink=>$symlink, target=>$target}],
         );
-        push @undo, (
+        unshift @undo, (
             ["rmsym", {path=>$symlink, target=>$target}],
             ["ln_s", {symlink=>$symlink, target=>$cur_target}],
         );
@@ -275,7 +275,7 @@ sub setup_symlink {
         push @do, (
             ["ln_s", {symlink=>$symlink, target=>$target}],
         );
-        push @undo, (
+        unshift @undo, (
             ["rmsym", {path=>$symlink}],
         );
     }
