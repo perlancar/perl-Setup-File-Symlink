@@ -47,35 +47,38 @@ sub rmsym {
 
     # TMP, schema
     my $tx_action = $args{-tx_action} // '';
-    my $path = $args{path};
+    my $dry_run   = $args{-dry_run};
+    my $path      = $args{path};
     defined($path) or return [400, "Please specify path"];
-    my $target = $args{target};
+    my $target    = $args{target};
 
-    my $is_sym   = (-l $path);
-    my $exists   = $is_sym || (-e _);
+    my $is_sym    = (-l $path);
+    my $exists    = $is_sym || (-e _);
     my $curtarget; $curtarget = readlink($path) if $is_sym;
 
     my @undo;
 
     if ($tx_action eq 'check_state') {
-        return [412, "Not a symlink"] if $exists && !$is_sym;
-        return [412, "Target does not match ($curtarget)"] if $is_sym &&
-            defined($target) && $curtarget ne $target;
+        return [412, "$path is not a symlink"] if $exists && !$is_sym;
+        return [412, "Target of symlink $path does not match ($curtarget)"]
+            if $is_sym && defined($target) && $curtarget ne $target;
         if ($exists) {
-            $log->info("nok: Symlink $path should be removed");
             unshift @undo, ['ln_s', {
                 symlink => $path,
                 target  => $target // $curtarget,
             }];
         }
         if (@undo) {
-            return [200, "Fixable", undef, {undo_actions=>\@undo}];
+            $log->info("(DRY) Deleting symlink $path ...") if $dry_run;
+            return [200, "Symlink $path should be removed", undef,
+                    {undo_actions=>\@undo}];
         } else {
-            return [304, "Fixed"];
+            return [304, "Symlink $path already does not exist"];
         }
     } elsif ($tx_action eq 'fix_state') {
+        $log->info("Deleting symlink $path ...");
         if (unlink $path) {
-            return [200, "Fixed"];
+            return [200, "OK"];
         } else {
             return [500, "Can't remove symlink: $!"];
         }
@@ -113,30 +116,34 @@ sub ln_s {
 
     # TMP, schema
     my $tx_action = $args{-tx_action} // '';
-    my $symlink = $args{symlink};
+    my $dry_run   = $args{-dry_run};
+    my $symlink   = $args{symlink};
     defined($symlink) or return [400, "Please specify symlink"];
-    my $target = $args{target};
+    my $target    = $args{target};
     defined($target) or return [400, "Please specify target"];
 
-    my $is_sym   = (-l $symlink);
-    my $exists   = $is_sym || (-e _);
+    my $is_sym    = (-l $symlink);
+    my $exists    = $is_sym || (-e _);
     my $curtarget; $curtarget = readlink($symlink) if $is_sym;
     my @undo;
 
     if ($tx_action eq 'check_state') {
-        return [412, "Path already exists"] if $exists && !$is_sym;
-        return [412, "Symlink points to another target"] if $is_sym &&
+        return [412, "Path $symlink already exists"] if $exists && !$is_sym;
+        return [412, "Symlink $symlink points to another target"] if $is_sym &&
             $curtarget ne $target;
         if (!$exists) {
-            $log->info("nok: Symlink $symlink -> $target should be created");
             unshift @undo, ['rmsym', {path => $symlink}];
         }
         if (@undo) {
-            return [200, "Fixable", undef, {undo_actions=>\@undo}];
+        $log->info("(DRY) Creating symlink $symlink -> $target ...")
+            if $dry_run;
+        return [200, "Symlink $symlink needs to be created", undef,
+                {undo_actions=>\@undo}];
         } else {
-            return [304, "Fixed"];
+            return [304, "Symlink $symlink already exists"];
         }
     } elsif ($tx_action eq 'fix_state') {
+        $log->info("Creating symlink $symlink -> $target ...");
         if (symlink $target, $symlink) {
             return [200, "Fixed"];
         } else {
@@ -235,15 +242,16 @@ sub setup_symlink {
 
     # TMP, schema
     my $tx_action    = $args{-tx_action} // '';
+    my $dry_run      = $args{-dry_run};
     my $should_exist = $args{should_exist} // 1;
     my $symlink      = $args{symlink} or return [400, "Please specify symlink"];
     my $target       = $args{target};
     if ($should_exist) {
         defined($target) or return [400, "Please specify target"];
     }
-    my $create       = $args{create}       // 1;
-    my $replace_file = $args{replace_file} // 0;
-    my $replace_dir  = $args{replace_dir}  // 0;
+    my $create          = $args{create}       // 1;
+    my $replace_file    = $args{replace_file} // 0;
+    my $replace_dir     = $args{replace_dir}  // 0;
     my $replace_symlink = $args{replace_symlink} // 1;
 
     my $is_sym     = (-l $symlink); # -l performs lstat()
@@ -258,13 +266,15 @@ sub setup_symlink {
 
     if ($should_exist) {
         if ($exists && !$is_sym) {
-            $log->info("nok: ".($is_dir ? "Dir" : "File")." $symlink ".
-                           "should be replaced by symlink");
             if ($is_dir && !$replace_dir) {
-                return [412, "must replace dir but instructed not to"];
+                return [412, "Must replace dir $symlink with symlink ".
+                            "but instructed not to"];
             } elsif (!$is_dir && !$replace_file) {
-                return [412, "must replace file but instructed not to"];
+                return [412, "Must replace file $symlink with symlink ".
+                            "but instructed not to"];
             }
+            $log->info("(DRY) Replacing file/dir $symlink with symlink ...")
+                if $dry_run;
             push @do, (
                 ["File::Trash::Undoable::trash",
                  {path=>$symlink, suffix=>$suffix}],
@@ -276,11 +286,11 @@ sub setup_symlink {
                  {path=>$symlink, suffix=>$suffix}],
             );
         } elsif ($is_sym && $cur_target ne $target) {
-            $log->infof("nok: Symlink $symlink doesn't point to correct target".
-                            " $target");
             if (!$replace_symlink) {
-                return [412, "must replace symlink but instructed not to"];
+                return [412, "Must replace symlink $symlink ".
+                            "but instructed not to"];
             }
+            $log->info("(DRY) Replacing symlink $symlink ...") if $dry_run;
             push @do, (
                 [rmsym => {path=>$symlink}],
                 [ln_s  => {symlink=>$symlink, target=>$target}],
@@ -290,10 +300,11 @@ sub setup_symlink {
                 ["ln_s", {symlink=>$symlink, target=>$cur_target}],
             );
         } elsif (!$exists) {
-            $log->infof("nok: $symlink doesn't exist");
             if (!$create) {
-                return [412, "must create symlink but instructed not to"];
+                return [412, "Must create symlink $symlink ".
+                            "but instructed not to"];
             }
+            $log->info("(DRY) Creating symlink $symlink ...") if $dry_run;
             push @do, (
                 ["ln_s", {symlink=>$symlink, target=>$target}],
             );
@@ -302,12 +313,13 @@ sub setup_symlink {
             );
         }
     } elsif ($exists) {
-        return [412, "must delete symlink but instructed not to"]
+        return [412, "Must delete symlink $symlink but instructed not to"]
             if $is_sym && !$replace_symlink;
-        return [412, "must delete dir but instructed not to"]
+        return [412, "Must delete dir $symlink but instructed not to"]
             if $is_dir && !$replace_dir;
-        return [412, "must delete file but instructed not to"]
+        return [412, "Must delete file $symlink but instructed not to"]
             if !$is_sym && !$is_dir && !$replace_file;
+        $log->info("(DRY) Removing symlink $symlink ...") if $dry_run;
         push    @do  , ["File::Trash::Undoable::trash",
                         {path=>$symlink, suffix=>$suffix}];
         unshift @undo, ["File::Trash::Undoable::untrash",
@@ -315,9 +327,9 @@ sub setup_symlink {
     }
 
     if (@do) {
-        return [200,"Fixable",undef, {do_actions=>\@do, undo_actions=>\@undo}];
+        return [200, "", undef, {do_actions=>\@do, undo_actions=>\@undo}];
     } else {
-        return [304, "Fixed"];
+        return [304, "Already fixed"];
     }
 }
 
