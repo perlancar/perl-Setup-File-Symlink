@@ -80,7 +80,7 @@ sub rmsym {
         if (unlink $path) {
             return [200, "OK"];
         } else {
-            return [500, "Can't remove symlink: $!"];
+            return [500, "Can't remove symlink $path: $!"];
         }
     }
     [400, "Invalid -tx_action"];
@@ -147,7 +147,7 @@ sub ln_s {
         if (symlink $target, $symlink) {
             return [200, "Fixed"];
         } else {
-            return [500, "Can't symlink: $!"];
+            return [500, "Can't symlink $symlink -> $target: $!"];
         }
     }
     [400, "Invalid -tx_action"];
