@@ -1,5 +1,8 @@
 package Setup::File::Symlink;
 
+# DATE
+# VERSION
+
 use 5.010001;
 use strict;
 use warnings;
@@ -11,9 +14,12 @@ require Exporter;
 our @ISA       = qw(Exporter);
 our @EXPORT_OK = qw(setup_symlink);
 
-# VERSION
-
 our %SPEC;
+
+$SPEC{':package'} = {
+    v => 1.1,
+    summary => 'Setup symlink (existence, target)',
+};
 
 $SPEC{rmsym} = {
     v           => 1.1,
@@ -334,7 +340,7 @@ sub setup_symlink {
 }
 
 1;
-# ABSTRACT: Setup symlink (existence, target)
+# ABSTRACT:
 
 =head1 SEE ALSO
 
