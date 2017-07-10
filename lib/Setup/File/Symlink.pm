@@ -6,7 +6,7 @@ package Setup::File::Symlink;
 use 5.010001;
 use strict;
 use warnings;
-use Log::Any::IfLOG '$log';
+use Log::ger;
 
 use File::Trash::Undoable;
 
@@ -75,14 +75,14 @@ sub rmsym {
             }];
         }
         if (@undo) {
-            $log->info("(DRY) Deleting symlink $path ...") if $dry_run;
+            log_info("(DRY) Deleting symlink $path ...") if $dry_run;
             return [200, "Symlink $path should be removed", undef,
                     {undo_actions=>\@undo}];
         } else {
             return [304, "Symlink $path already does not exist"];
         }
     } elsif ($tx_action eq 'fix_state') {
-        $log->info("Deleting symlink $path ...");
+        log_info("Deleting symlink $path ...");
         if (unlink $path) {
             return [200, "OK"];
         } else {
@@ -141,7 +141,7 @@ sub ln_s {
             unshift @undo, ['rmsym', {path => $symlink}];
         }
         if (@undo) {
-        $log->info("(DRY) Creating symlink $symlink -> $target ...")
+        log_info("(DRY) Creating symlink $symlink -> $target ...")
             if $dry_run;
         return [200, "Symlink $symlink needs to be created", undef,
                 {undo_actions=>\@undo}];
@@ -149,7 +149,7 @@ sub ln_s {
             return [304, "Symlink $symlink already exists"];
         }
     } elsif ($tx_action eq 'fix_state') {
-        $log->info("Creating symlink $symlink -> $target ...");
+        log_info("Creating symlink $symlink -> $target ...");
         if (symlink $target, $symlink) {
             return [200, "Fixed"];
         } else {
@@ -279,7 +279,7 @@ sub setup_symlink {
                 return [412, "Must replace file $symlink with symlink ".
                             "but instructed not to"];
             }
-            $log->info("(DRY) Replacing file/dir $symlink with symlink ...")
+            log_info("(DRY) Replacing file/dir $symlink with symlink ...")
                 if $dry_run;
             push @do, (
                 ["File::Trash::Undoable::trash",
@@ -296,7 +296,7 @@ sub setup_symlink {
                 return [412, "Must replace symlink $symlink ".
                             "but instructed not to"];
             }
-            $log->info("(DRY) Replacing symlink $symlink ...") if $dry_run;
+            log_info("(DRY) Replacing symlink $symlink ...") if $dry_run;
             push @do, (
                 [rmsym => {path=>$symlink}],
                 [ln_s  => {symlink=>$symlink, target=>$target}],
@@ -310,7 +310,7 @@ sub setup_symlink {
                 return [412, "Must create symlink $symlink ".
                             "but instructed not to"];
             }
-            $log->info("(DRY) Creating symlink $symlink ...") if $dry_run;
+            log_info("(DRY) Creating symlink $symlink ...") if $dry_run;
             push @do, (
                 ["ln_s", {symlink=>$symlink, target=>$target}],
             );
@@ -325,7 +325,7 @@ sub setup_symlink {
             if $is_dir && !$replace_dir;
         return [412, "Must delete file $symlink but instructed not to"]
             if !$is_sym && !$is_dir && !$replace_file;
-        $log->info("(DRY) Removing symlink $symlink ...") if $dry_run;
+        log_info("(DRY) Removing symlink $symlink ...") if $dry_run;
         push    @do  , ["File::Trash::Undoable::trash",
                         {path=>$symlink, suffix=>$suffix}];
         unshift @undo, ["File::Trash::Undoable::untrash",
